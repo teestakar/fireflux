@@ -1050,14 +1050,26 @@
 
       // WebSocket
       function connectWS() {
-        const ws = new WebSocket(
-          "wss://fireflux-production.up.railway.app/ws/1",
-        );
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const host = "fireflux-production.up.railway.app";
+
+        const ws = new WebSocket(`${protocol}://${host}/ws/1`);
+
         ws.onmessage = (event) => {
           const data = JSON.parse(event.data);
-          if (data.room_id === 1) updateBanner(data.risk_level, data.reason);
+          if (data.room_id === 1) {
+            updateBanner(data.risk_level, data.reason);
+          }
         };
-        ws.onclose = () => setTimeout(connectWS, 3000);
+
+        ws.onerror = (err) => {
+          console.log("WebSocket error:", err);
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket closed. Reconnecting...");
+          setTimeout(connectWS, 3000);
+        };
       }
 
       async function loadLatest() {
