@@ -1,0 +1,24 @@
+# Virtual environment — never include this
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database files
+*.db
+*.sqlite
+
+# Environment files — secrets never go in Docker image
+.env
+
+# Git
+.git
+.gitignore
+
+# Test files
+test.py
+test.html

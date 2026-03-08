@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FireFlux — Building A</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #060a0f; --panel: #0a1220; --border: #1a2a3a;
+      --safe: #00ff88; --warning: #ffaa00; --danger: #ff2244;
+      --text: #c8d8e8; --dim: #4a6a8a; --accent: #0088ff;
+      --font-mono: 'Share Tech Mono', monospace;
+      --font-ui: 'Rajdhani', sans-serif;
+      --font-display: 'Orbitron', monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-ui); min-height: 100vh; }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image: linear-gradient(rgba(0,136,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,136,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px; pointer-events: none; z-index: 0;
+    }
+    header {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px; background: rgba(6,10,15,0.95); border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .back-btn {
+      color: var(--dim); text-decoration: none; font-family: var(--font-mono);
+      font-size: 11px; letter-spacing: 1px; padding: 6px 12px;
+      border: 1px solid var(--border); border-radius: 2px; transition: all 0.2s;
+    }
+    .back-btn:hover { color: var(--accent); border-color: rgba(0,136,255,0.4); }
+    .page-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; letter-spacing: 3px; }
+    .page-title span { color: var(--dim); font-size: 11px; display: block; letter-spacing: 2px; margin-top: 2px; }
+    .live-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3);
+      padding: 6px 14px; border-radius: 2px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--safe); letter-spacing: 2px;
+    }
+    .live-dot { width: 6px; height: 6px; background: var(--safe); border-radius: 50%; animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+    #alert-banner {
+      position: relative; z-index: 10; padding: 12px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 14px; font-weight: 600; letter-spacing: 1px;
+      transition: all 0.5s ease; border-bottom: 1px solid var(--border);
+    }
+    #alert-banner.safe { background: rgba(0,255,136,0.06); color: var(--safe); }
+    #alert-banner.warning { background: rgba(255,170,0,0.08); color: var(--warning); animation: wpulse 2s infinite; }
+    #alert-banner.danger { background: rgba(255,34,68,0.10); color: var(--danger); animation: dpulse 1s infinite; }
+    @keyframes wpulse { 0%,100%{background:rgba(255,170,0,0.06)} 50%{background:rgba(255,170,0,0.14)} }
+    @keyframes dpulse { 0%,100%{background:rgba(255,34,68,0.08)} 50%{background:rgba(255,34,68,0.18)} }
+
+    .content { position: relative; z-index: 1; padding: 32px; max-width: 1200px; margin: 0 auto; }
+    .floor-section { margin-bottom: 32px; }
+    .floor-label {
+      font-family: var(--font-display); font-size: 11px; letter-spacing: 3px;
+      color: var(--dim); margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .floor-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .floor-plan { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 20px 24px; }
+
+    /* EXITS — clean separate row */
+    .exits-row {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 12px; margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .exits-label { font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: 2px; }
+    .exit-sign {
+      font-family: var(--font-mono); font-size: 9px; letter-spacing: 1px;
+      padding: 4px 10px; border-radius: 2px; transition: all 0.3s;
+    }
+    .exit-sign.safe-exit { background: rgba(0,136,255,0.1); border: 1px solid rgba(0,136,255,0.3); color: var(--accent); }
+    .exit-sign.unsafe-exit { background: rgba(255,34,68,0.1); border: 1px solid rgba(255,34,68,0.3); color: var(--danger); }
+
+    /* ROOMS */
+    .rooms-row { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; }
+    .room {
+      border-radius: 3px; padding: 12px 8px; transition: all 0.3s ease;
+      text-align: center; min-height: 88px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    }
+    .room.safe { background: rgba(0,255,136,0.04); border: 1px solid rgba(0,255,136,0.15); }
+    .room.warning { background: rgba(255,170,0,0.06); border: 1px solid rgba(255,170,0,0.3); }
+    .room.danger { background: rgba(255,34,68,0.08); border: 1px solid rgba(255,34,68,0.4); animation: rdanger 1s infinite; }
+    @keyframes rdanger { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 12px rgba(255,34,68,0.3)} }
+    .room.clickable { cursor: pointer; }
+    .room.clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    .room-number { font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+    .room.safe .room-number { color: var(--safe); }
+    .room.warning .room-number { color: var(--warning); }
+    .room.danger .room-number { color: var(--danger); }
+    .room-status { font-family: var(--font-mono); font-size: 8px; letter-spacing: 1px; opacity: 0.8; }
+    .room.safe .room-status { color: var(--safe); }
+    .room.warning .room-status { color: var(--warning); }
+    .room.danger .room-status { color: var(--danger); }
+    .room-icon { font-size: 14px; margin-bottom: 2px; }
+
+    .corridor {
+      height: 24px; margin: 10px 0;
+      background: rgba(0,136,255,0.04); border: 1px solid rgba(0,136,255,0.08);
+      border-radius: 2px; display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: 3px;
+    }
+
+    /* EXTINGUISHER ROW — below corridor, clearly separate */
+    .ext-row {
+      display: flex; justify-content: space-between;
+      padding: 8px 4px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 10px;
+    }
+    .ext-item {
+      display: flex; align-items: center; gap: 4px;
+      font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: 1px;
+    }
+
+    .maps-section {
+      margin-top: 24px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 4px; padding: 20px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .maps-info h3 { font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 2px; margin-bottom: 4px; }
+    .maps-info p { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+    .maps-btn {
+      display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+      background: rgba(0,136,255,0.12); border: 1px solid rgba(0,136,255,0.3);
+      color: var(--accent); text-decoration: none;
+      font-family: var(--font-display); font-size: 10px; letter-spacing: 2px;
+      border-radius: 2px; transition: all 0.2s;
+    }
+    .maps-btn:hover { background: rgba(0,136,255,0.22); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <a href="index.html" class="back-btn">← BACK</a>
+    <div class="page-title">BUILDING A <span>IEM CAMPUS — SECTOR V, KOLKATA</span></div>
+  </div>
+  <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+</header>
+
+<div id="alert-banner" class="safe">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="banner-icon">✅</span>
+    <span id="banner-text">Building A — All rooms operational, no threats detected</span>
+  </div>
+  <span id="banner-status" style="font-family:var(--font-display);font-size:10px;letter-spacing:3px">ALL SAFE</span>
+</div>
+
+<div class="content">
+
+  <!-- FLOOR 1 -->
+  <div class="floor-section">
+    <div class="floor-label">FLOOR 1</div>
+    <div class="floor-plan">
+      <div class="exits-row">
+        <span class="exits-label">EXITS:</span>
+        <span class="exit-sign safe-exit" id="exit-north-1">🚪 NORTH EXIT</span>
+        <span class="exit-sign safe-exit" id="exit-stairwell-1">🚪 STAIRWELL A</span>
+      </div>
+      <div class="rooms-row">
+        <div class="room safe clickable" id="room-101" onclick="location.href='room101.html'">
+          <div class="room-icon">🟢</div>
+          <div class="room-number">101</div>
+          <div class="room-status" id="status-101">LOADING...</div>
+        </div>
+        <div class="room safe clickable" id="room-102" onclick="location.href='room102.html'">
+          <div class="room-icon">🟢</div>
+          <div class="room-number">102</div>
+          <div class="room-status" id="status-102">LOADING...</div>
+        </div>
+        <div class="room safe clickable" id="room-103" onclick="location.href='room103.html'">
+          <div class="room-icon">🟢</div>
+          <div class="room-number">103</div>
+          <div class="room-status" id="status-103">LOADING...</div>
+        </div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">104</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">105</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">106</div><div class="room-status">SAFE</div></div>
+      </div>
+      <div class="corridor">— CORRIDOR —</div>
+      <div class="ext-row">
+        <div class="ext-item">🧯 EXTINGUISHER</div>
+        <div class="ext-item">🧯 EXTINGUISHER</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOOR 2 -->
+  <div class="floor-section">
+    <div class="floor-label">FLOOR 2</div>
+    <div class="floor-plan">
+      <div class="exits-row">
+        <span class="exits-label">EXITS:</span>
+        <span class="exit-sign safe-exit">🚪 NORTH EXIT</span>
+        <span class="exit-sign safe-exit">🚪 STAIRWELL B</span>
+      </div>
+      <div class="rooms-row">
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">201</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">202</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">203</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">204</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">205</div><div class="room-status">SAFE</div></div>
+        <div class="room safe"><div class="room-icon">🟢</div><div class="room-number">206</div><div class="room-status">SAFE</div></div>
+      </div>
+      <div class="corridor">— CORRIDOR —</div>
+      <div class="ext-row">
+        <div class="ext-item">🧯 EXTINGUISHER</div>
+        <div class="ext-item">🧯 EXTINGUISHER</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="maps-section">
+    <div class="maps-info">
+      <h3>🚒 FIRE BRIGADE NAVIGATION</h3>
+      <p>IEM Campus, GN-34/2, Sector V, Bidhannagar, Kolkata — 700091</p>
+    </div>
+    <a href="https://www.google.com/maps/search/IEM+College+Sector+V+Kolkata" target="_blank" class="maps-btn">📍 OPEN IN GOOGLE MAPS</a>
+  </div>
+</div>
+
+<script>
+  // Track levels AND reasons for all 3 live rooms
+  const roomLevels = { 1: 'safe', 2: 'safe', 3: 'safe' };
+  const roomReasons = { 1: '', 2: '', 3: '' };
+
+  const icons = { safe: '🟢', warning: '🟡', danger: '🔴' };
+
+  function updateRoom(roomNumber, level) {
+    const roomEl = document.getElementById(`room-${roomNumber}`);
+    const statusEl = document.getElementById(`status-${roomNumber}`);
+    if (!roomEl || !statusEl) return;
+    roomEl.className = `room ${level} clickable`;
+    statusEl.textContent = level.toUpperCase();
+    roomEl.querySelector('.room-icon').textContent = icons[level];
+  }
+
+  function updateBanner(level, reason) {
+    const banner = document.getElementById('alert-banner');
+    document.getElementById('banner-icon').textContent = level === 'safe' ? '✅' : level === 'warning' ? '⚠️' : '🚨';
+    document.getElementById('banner-text').textContent = level === 'safe'
+      ? 'Building A — All rooms operational, no threats detected'
+      : level === 'warning'
+      ? `WARNING in Building A — ${reason}`
+      : `DANGER in Building A — ${reason} — Evacuate immediately`;
+    document.getElementById('banner-status').textContent = level === 'safe' ? 'ALL SAFE' : level.toUpperCase();
+    banner.className = level;
+
+    const northExit = document.getElementById('exit-north-1');
+    if (level === 'danger') {
+      northExit.className = 'exit-sign unsafe-exit';
+      northExit.textContent = '🚫 NORTH EXIT — UNSAFE';
+    } else {
+      northExit.className = 'exit-sign safe-exit';
+      northExit.textContent = '🚪 NORTH EXIT';
+    }
+  }
+
+  function getWorstLevel() {
+    const vals = Object.values(roomLevels);
+    if (vals.includes('danger')) return 'danger';
+    if (vals.includes('warning')) return 'warning';
+    return 'safe';
+  }
+
+  function getWorstReason() {
+    // Returns reason of the worst room
+    for (const [roomId, level] of Object.entries(roomLevels)) {
+      if (level === 'danger') return roomReasons[roomId];
+    }
+    for (const [roomId, level] of Object.entries(roomLevels)) {
+      if (level === 'warning') return roomReasons[roomId];
+    }
+    return '';
+  }
+
+  // Load latest for each room — stores level AND reason
+  async function loadLatest(roomId, roomNumber) {
+    try {
+      const res = await fetch(`http://localhost:8000/rooms/${roomId}/latest`);
+      if (!res.ok) return;
+      const data = await res.json();
+      roomLevels[roomId] = data.risk_level;
+      roomReasons[roomId] = data.reason;
+      updateRoom(roomNumber, data.risk_level);
+    } catch(e) {
+      console.log('Could not load latest for room', roomNumber);
+      document.getElementById(`status-${roomNumber}`).textContent = 'OFFLINE';
+    }
+  }
+
+  // Wait for ALL three rooms to load before updating banner
+  async function loadAllLatest() {
+    await Promise.all([
+      loadLatest(1, 101),
+      loadLatest(2, 102),
+      loadLatest(3, 103)
+    ]);
+    updateBanner(getWorstLevel(), getWorstReason());
+  }
+
+  // WebSocket for live updates
+  function connectWS(roomId, roomNumber) {
+    const ws = new WebSocket(`ws://localhost:8000/ws/${roomId}`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.room_id !== roomId) return;
+      roomLevels[roomId] = data.risk_level;
+      roomReasons[roomId] = data.reason;
+      updateRoom(roomNumber, data.risk_level);
+      updateBanner(getWorstLevel(), getWorstReason());
+    };
+    ws.onclose = () => setTimeout(() => connectWS(roomId, roomNumber), 3000);
+  }
+
+  loadAllLatest();
+  connectWS(1, 101);
+  connectWS(2, 102);
+  connectWS(3, 103);
+</script>
+</body>
+</html>

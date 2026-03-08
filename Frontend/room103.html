@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FireFlux — Room 103</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #060a0f; --panel: #0a1220; --border: #1a2a3a;
+      --safe: #00ff88; --warning: #ffaa00; --danger: #ff2244;
+      --text: #c8d8e8; --dim: #4a6a8a; --accent: #0088ff;
+      --font-mono: 'Share Tech Mono', monospace;
+      --font-ui: 'Rajdhani', sans-serif;
+      --font-display: 'Orbitron', monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-ui); min-height: 100vh; }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image: linear-gradient(rgba(0,136,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,136,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px; pointer-events: none; z-index: 0;
+    }
+    header {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px; background: rgba(6,10,15,0.95); border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .back-btn {
+      color: var(--dim); text-decoration: none; font-family: var(--font-mono);
+      font-size: 11px; letter-spacing: 1px; padding: 6px 12px;
+      border: 1px solid var(--border); border-radius: 2px; transition: all 0.2s;
+    }
+    .back-btn:hover { color: var(--accent); border-color: rgba(0,136,255,0.4); }
+    .page-title { font-family: var(--font-display); font-size: 16px; font-weight: 700; letter-spacing: 3px; }
+    .page-title span { color: var(--dim); font-size: 10px; display: block; letter-spacing: 2px; margin-top: 2px; }
+    .live-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3);
+      padding: 6px 14px; border-radius: 2px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--safe); letter-spacing: 2px;
+    }
+    .live-dot { width: 6px; height: 6px; background: var(--safe); border-radius: 50%; animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+    .sim-badge {
+      font-family: var(--font-mono); font-size: 9px; letter-spacing: 2px;
+      padding: 4px 10px; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); color: var(--dim); border-radius: 2px;
+    }
+    #offline-notice {
+      display: none; position: relative; z-index: 10;
+      padding: 8px 32px;
+      background: rgba(255,170,0,0.08); border-bottom: 1px solid rgba(255,170,0,0.2);
+      font-family: var(--font-mono); font-size: 11px; color: var(--warning); letter-spacing: 1px;
+    }
+    #risk-banner {
+      position: relative; z-index: 10; padding: 20px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); transition: all 0.5s;
+      background: rgba(0,255,136,0.06);
+    }
+    .risk-left { display: flex; align-items: center; gap: 20px; }
+    .score-circle {
+      width: 70px; height: 70px; border-radius: 50%;
+      border: 3px solid var(--safe); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; background: rgba(0,255,136,0.05);
+    }
+    .score-num { font-family: var(--font-display); font-size: 20px; font-weight: 900; color: var(--safe); }
+    .score-lbl { font-family: var(--font-mono); font-size: 7px; color: var(--dim); letter-spacing: 1px; }
+    .risk-info h2 { font-family: var(--font-display); font-size: 22px; font-weight: 900; letter-spacing: 4px; color: var(--safe); }
+    .risk-reason { font-family: var(--font-mono); font-size: 11px; color: var(--dim); margin-top: 4px; }
+    .content {
+      position: relative; z-index: 1; padding: 28px 32px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+      max-width: 1200px; margin: 0 auto;
+    }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 20px 22px; }
+    .panel-title {
+      font-family: var(--font-display); font-size: 10px; letter-spacing: 3px;
+      color: var(--dim); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .sensor-item { margin-bottom: 20px; }
+    .sensor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .sensor-name { font-family: var(--font-mono); font-size: 11px; color: var(--dim); letter-spacing: 1px; }
+    .sensor-value { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text); }
+    .sensor-bar-track { height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+    .sensor-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+    .sensor-status { font-family: var(--font-mono); font-size: 9px; letter-spacing: 1px; margin-top: 4px; color: var(--safe); }
+    .motion-indicator { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
+    .motion-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--dim); transition: all 0.3s; }
+    .motion-dot.active { background: var(--warning); box-shadow: 0 0 10px rgba(255,170,0,0.5); }
+    .motion-text { font-family: var(--font-display); font-size: 13px; letter-spacing: 2px; }
+    .ai-box { grid-column: 1 / -1; }
+    .ai-content {
+      background: rgba(0,136,255,0.04); border: 1px solid rgba(0,136,255,0.15);
+      border-radius: 3px; padding: 16px; font-family: var(--font-mono);
+      font-size: 12px; line-height: 1.7; color: var(--text);
+    }
+    .ai-prefix { color: var(--accent); margin-right: 8px; }
+    .exit-item {
+      padding: 12px; border-radius: 3px; display: flex; align-items: center; gap: 8px;
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 1px;
+      background: rgba(0,136,255,0.08); border: 1px solid rgba(0,136,255,0.2); color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .chart-section { grid-column: 1 / -1; }
+    .chart-wrapper { height: 200px; position: relative; }
+    .history-section { grid-column: 1 / -1; }
+    .timeline { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+    .timeline::-webkit-scrollbar { width: 4px; }
+    .timeline::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .timeline-item {
+      display: grid; grid-template-columns: 130px 80px 100px 90px 1fr;
+      gap: 10px; align-items: center; padding: 9px 14px;
+      background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+      border-radius: 3px; font-family: var(--font-mono); font-size: 10px;
+      transition: background 0.2s;
+    }
+    .timeline-item:hover { background: rgba(255,255,255,0.04); }
+    .timeline-item.new-row { animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .timeline-header {
+      display: grid; grid-template-columns: 130px 80px 100px 90px 1fr;
+      gap: 10px; padding: 6px 14px;
+      font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: 2px;
+      border-bottom: 1px solid var(--border); margin-bottom: 6px;
+    }
+    .tl-time { color: var(--dim); } .tl-temp { color: #ff8844; } .tl-gas { color: #44aaff; }
+    .tl-level { padding: 2px 8px; border-radius: 2px; text-align: center; font-size: 9px; letter-spacing: 1px; }
+    .tl-level.safe { background: rgba(0,255,136,0.1); color: var(--safe); border: 1px solid rgba(0,255,136,0.2); }
+    .tl-level.warning { background: rgba(255,170,0,0.1); color: var(--warning); border: 1px solid rgba(255,170,0,0.2); }
+    .tl-level.danger { background: rgba(255,34,68,0.12); color: var(--danger); border: 1px solid rgba(255,34,68,0.25); }
+    .tl-reason { color: var(--dim); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <a href="buildingA.html" class="back-btn">← BUILDING A</a>
+    <div class="page-title">ROOM 103 <span>FLOOR 1 — BUILDING A — SIMULATED DATA</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="sim-badge">SIMULATED</span>
+    <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+  </div>
+</header>
+
+<div id="offline-notice">⚠️ SERVER OFFLINE — Showing last known data</div>
+
+<div id="risk-banner">
+  <div class="risk-left">
+    <div class="score-circle">
+      <div class="score-num" id="score-value">--</div>
+      <div class="score-lbl">RISK</div>
+    </div>
+    <div class="risk-info">
+      <h2 id="risk-level">LOADING...</h2>
+      <div class="risk-reason" id="risk-reason">Fetching latest data...</div>
+    </div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--dim)">LAST UPDATED</div>
+    <div id="last-time" style="font-family:var(--font-mono);font-size:14px;color:var(--text)">--:--:--</div>
+  </div>
+</div>
+
+<div class="content">
+  <div class="panel">
+    <div class="panel-title">SENSOR READINGS</div>
+    <div class="sensor-item">
+      <div class="sensor-header"><span class="sensor-name">🌡 TEMPERATURE</span><span class="sensor-value" id="temp-value">-- °C</span></div>
+      <div class="sensor-bar-track"><div class="sensor-bar-fill" id="temp-bar" style="width:0%;background:var(--safe)"></div></div>
+      <div class="sensor-status">● WORKING</div>
+    </div>
+    <div class="sensor-item">
+      <div class="sensor-header"><span class="sensor-name">💨 GAS / SMOKE</span><span class="sensor-value" id="gas-value">-- ppm</span></div>
+      <div class="sensor-bar-track"><div class="sensor-bar-fill" id="gas-bar" style="width:0%;background:var(--safe)"></div></div>
+      <div class="sensor-status">● WORKING</div>
+    </div>
+    <div class="sensor-item">
+      <div class="sensor-header"><span class="sensor-name">👁 MOTION DETECTION</span></div>
+      <div class="motion-indicator">
+        <div class="motion-dot" id="motion-dot"></div>
+        <span class="motion-text" id="motion-text" style="color:var(--dim)">NO MOTION</span>
+      </div>
+      <div class="sensor-status">● WORKING</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">ROOM INFORMATION</div>
+    <div style="margin-bottom:20px">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--dim);letter-spacing:2px;margin-bottom:12px">LOCATION</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px">Room 103 — Floor 1</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--dim)">Building A, IEM Campus, Sector V</div>
+      <div style="margin-top:10px;font-family:var(--font-mono);font-size:10px;color:var(--dim)">🧯 Fire Extinguisher: Present<br/>🚿 Sprinkler System: Active</div>
+    </div>
+    <div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--dim);letter-spacing:2px;margin-bottom:12px">EXIT STATUS</div>
+      <div class="exit-item">🚪 NORTH EXIT — SAFE</div>
+      <div class="exit-item">🚪 STAIRWELL B — SAFE</div>
+    </div>
+  </div>
+
+  <div class="panel ai-box">
+    <div class="panel-title">AI SYSTEM RECOMMENDATION</div>
+    <div class="ai-content"><span class="ai-prefix">SYS›</span><span id="ai-text">Initialising... fetching latest sensor data.</span></div>
+  </div>
+
+  <div class="panel chart-section">
+    <div class="panel-title">SENSOR HISTORY — LAST 50 READINGS</div>
+    <div class="chart-wrapper"><canvas id="sensorChart"></canvas></div>
+  </div>
+
+  <div class="panel history-section">
+    <div class="panel-title">READING TIMELINE — LAST 10 READINGS</div>
+    <div class="timeline-header"><span>TIMESTAMP</span><span>TEMP</span><span>GAS</span><span>LEVEL</span><span>REASON</span></div>
+    <div class="timeline" id="timeline">
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--dim);padding:16px 14px">Loading history...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const ROOM_ID = 3;
+  const MAX_TIMELINE_ROWS = 10;
+
+  const ctx = document.getElementById('sensorChart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Temperature (°C)', data: [], borderColor: '#ff8844', backgroundColor: 'rgba(255,136,68,0.05)', borderWidth: 2, pointRadius: 2, tension: 0.4, fill: true, yAxisID: 'y' },
+        { label: 'Gas (ppm)', data: [], borderColor: '#44aaff', backgroundColor: 'rgba(68,170,255,0.05)', borderWidth: 2, pointRadius: 2, tension: 0.4, fill: true, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      plugins: { legend: { labels: { color: '#4a6a8a', font: { family: 'Share Tech Mono', size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#4a6a8a', font: { family: 'Share Tech Mono', size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(26,42,58,0.8)' } },
+        y: { position: 'left', ticks: { color: '#ff8844', font: { family: 'Share Tech Mono', size: 9 } }, grid: { color: 'rgba(26,42,58,0.8)' } },
+        y1: { position: 'right', ticks: { color: '#44aaff', font: { family: 'Share Tech Mono', size: 9 } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+
+  function updateUI(data) {
+    document.getElementById('score-value').textContent = data.risk_score.toFixed(1);
+    document.getElementById('risk-level').textContent = (data.risk_level || 'safe').toUpperCase();
+    document.getElementById('risk-reason').textContent = data.reason;
+    document.getElementById('last-time').textContent = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+    document.getElementById('ai-text').textContent = `✅ All systems normal. Temperature ${data.temperature.toFixed(1)}°C and gas ${data.gas_value.toFixed(0)}ppm within safe parameters. No action required.`;
+    document.getElementById('temp-value').textContent = `${data.temperature.toFixed(1)} °C`;
+    document.getElementById('temp-bar').style.width = Math.min((data.temperature / 120) * 100, 100) + '%';
+    document.getElementById('gas-value').textContent = `${data.gas_value.toFixed(0)} ppm`;
+    document.getElementById('gas-bar').style.width = Math.min((data.gas_value / 2500) * 100, 100) + '%';
+    if (data.motion) {
+      document.getElementById('motion-dot').className = 'motion-dot active';
+      document.getElementById('motion-text').textContent = 'MOTION DETECTED';
+      document.getElementById('motion-text').style.color = 'var(--warning)';
+    } else {
+      document.getElementById('motion-dot').className = 'motion-dot';
+      document.getElementById('motion-text').textContent = 'NO MOTION';
+      document.getElementById('motion-text').style.color = 'var(--dim)';
+    }
+  }
+
+  function buildTimelineRow(timestamp, temp, gas, level, reason, isNew = false) {
+    const item = document.createElement('div');
+    item.className = `timeline-item${isNew ? ' new-row' : ''}`;
+    item.innerHTML = `
+      <span class="tl-time">${new Date(timestamp).toLocaleTimeString()}</span>
+      <span class="tl-temp">${parseFloat(temp).toFixed(1)}°C</span>
+      <span class="tl-gas">${parseFloat(gas).toFixed(0)} ppm</span>
+      <span class="tl-level ${level}">${level.toUpperCase()}</span>
+      <span class="tl-reason">${reason || 'All normal'}</span>
+    `;
+    return item;
+  }
+
+  function addTimelineRow(timestamp, temp, gas, level, reason) {
+    const timeline = document.getElementById('timeline');
+    const placeholder = timeline.querySelector('div:not(.timeline-item)');
+    if (placeholder) placeholder.remove();
+    const item = buildTimelineRow(timestamp, temp, gas, level, reason, true);
+    timeline.insertBefore(item, timeline.firstChild);
+    while (timeline.children.length > MAX_TIMELINE_ROWS) {
+      timeline.removeChild(timeline.lastChild);
+    }
+  }
+
+  async function loadLatest() {
+    try {
+      const res = await fetch(`http://localhost:8000/rooms/${ROOM_ID}/latest`);
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      updateUI(data);
+      document.getElementById('offline-notice').style.display = 'none';
+    } catch(e) {
+      document.getElementById('offline-notice').style.display = 'block';
+      document.getElementById('risk-level').textContent = 'OFFLINE';
+      document.getElementById('risk-reason').textContent = 'Cannot reach server — check FastAPI is running';
+      document.getElementById('ai-text').textContent = 'Server unavailable. Last known data shown if available.';
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch(`http://localhost:8000/rooms/${ROOM_ID}/history?limit=10`);
+      if (!res.ok) throw new Error('bad response');
+      const readings = await res.json();
+
+      [...readings].reverse().forEach(r => {
+        chart.data.labels.push(new Date(r.timestamp).toLocaleTimeString());
+        chart.data.datasets[0].data.push(r.temperature);
+        chart.data.datasets[1].data.push(r.gas_value);
+      });
+      chart.update();
+
+      const timeline = document.getElementById('timeline');
+      timeline.innerHTML = '';
+      if (readings.length === 0) {
+        timeline.innerHTML = '<div style="font-family:var(--font-mono);font-size:11px;color:var(--dim);padding:16px 14px">No history available yet</div>';
+        return;
+      }
+      readings.forEach(r => {
+        const item = buildTimelineRow(r.timestamp, r.temperature, r.gas_value, r.risk_level || 'safe', r.reason);
+        timeline.appendChild(item);
+      });
+    } catch(e) {
+      document.getElementById('timeline').innerHTML = '<div style="font-family:var(--font-mono);font-size:11px;color:var(--dim);padding:16px 14px">Could not load history</div>';
+    }
+  }
+
+  function connectWS() {
+    const ws = new WebSocket(`ws://localhost:8000/ws/${ROOM_ID}`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.room_id !== ROOM_ID) return;
+      document.getElementById('offline-notice').style.display = 'none';
+      updateUI(data);
+      chart.data.labels.push(new Date().toLocaleTimeString());
+      chart.data.datasets[0].data.push(data.temperature);
+      chart.data.datasets[1].data.push(data.gas_value);
+      if (chart.data.labels.length > 50) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); chart.data.datasets[1].data.shift(); }
+      chart.update();
+      addTimelineRow(new Date().toISOString(), data.temperature, data.gas_value, data.risk_level, data.reason);
+    };
+    ws.onclose = () => setTimeout(connectWS, 3000);
+  }
+
+  loadLatest();
+  loadHistory();
+  connectWS();
+</script>
+</body>
+</html>

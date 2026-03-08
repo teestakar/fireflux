@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+fire_model.pkl
+.env
+test.py
+test.html
