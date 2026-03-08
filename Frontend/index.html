@@ -354,25 +354,32 @@
         display: flex !important;
         flex-direction: column !important;
         height: auto !important;
+        position: static !important;
       }
       #map {
         height: 260px !important;
         width: 100% !important;
+        position: relative !important;
+        z-index: 1 !important;
         order: 2;
+        flex-shrink: 0;
       }
       .sidebar {
         width: 100% !important;
+        height: auto !important;
         max-height: none !important;
         overflow-y: visible !important;
+        overflow-x: hidden !important;
         order: 1;
         padding: 12px !important;
+        position: relative !important;
+        z-index: 2 !important;
+        background: var(--bg) !important;
       }
       header { padding: 8px 12px; }
-      .logo-text { font-size: 14px; }
       .logo-sub { display: none; }
       .header-right { gap: 10px; }
       .status-banner { padding: 10px 12px; }
-      .banner-text { font-size: 12px; }
     }
   </style>
 </head>

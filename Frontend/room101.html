@@ -138,6 +138,20 @@
       font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: 2px;
       border-bottom: 1px solid var(--border); margin-bottom: 6px;
     }
+    @media (max-width: 768px) {
+      .timeline-header {
+        grid-template-columns: 80px 60px 70px 60px 1fr !important;
+        gap: 4px !important; padding: 6px 8px !important; font-size: 8px !important;
+      }
+      .timeline-item {
+        grid-template-columns: 80px 60px 70px 60px 1fr !important;
+        gap: 4px !important; padding: 6px 8px !important;
+      }
+      .tl-reason { font-size: 8px !important; white-space: normal !important; overflow: visible !important; }
+      .content { padding: 12px !important; }
+      .grid-2 { grid-template-columns: 1fr !important; }
+      .history-chart-wrap { height: 180px !important; }
+    }
     .tl-time { color: var(--dim); }
     .tl-temp { color: #ff8844; }
     .tl-gas { color: #44aaff; }
