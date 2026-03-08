@@ -4,3 +4,5 @@ __pycache__/
 .env
 test.py
 test.html
+*.csv
+migrate.py
