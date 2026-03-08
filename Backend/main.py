@@ -169,9 +169,11 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            await connection.send_text(json.dumps(message))
-
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_text(json.dumps(message))
+            except:
+                self.active_connections.remove(connection)
 
 manager = ConnectionManager()
 
@@ -310,10 +312,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int):
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            await websocket.receive()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-
 
 # ─────────────────────────────────────────────
 # GET LATEST READING FOR A ROOM
