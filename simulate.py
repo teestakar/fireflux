@@ -2,7 +2,7 @@ import time
 import requests
 import random
 
-SERVER_URL = "http://localhost:8000/ingest"
+SERVER_URL = "https://fireflux-production.up.railway.app"
 
 while True:
     for room_id in [2, 3]:

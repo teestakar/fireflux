@@ -231,10 +231,7 @@
 </div>
 
 <script>
-  // Track levels AND reasons for all 3 live rooms
   const roomLevels = { 1: 'safe', 2: 'safe', 3: 'safe' };
-  const roomReasons = { 1: '', 2: '', 3: '' };
-
   const icons = { safe: '🟢', warning: '🟡', danger: '🔴' };
 
   function updateRoom(roomNumber, level) {
@@ -257,6 +254,7 @@
     document.getElementById('banner-status').textContent = level === 'safe' ? 'ALL SAFE' : level.toUpperCase();
     banner.className = level;
 
+    // Update exit signs based on level
     const northExit = document.getElementById('exit-north-1');
     if (level === 'danger') {
       northExit.className = 'exit-sign unsafe-exit';
@@ -274,57 +272,37 @@
     return 'safe';
   }
 
-  function getWorstReason() {
-    // Returns reason of the worst room
-    for (const [roomId, level] of Object.entries(roomLevels)) {
-      if (level === 'danger') return roomReasons[roomId];
-    }
-    for (const [roomId, level] of Object.entries(roomLevels)) {
-      if (level === 'warning') return roomReasons[roomId];
-    }
-    return '';
-  }
-
-  // Load latest for each room — stores level AND reason
+  // FIX: Load latest data immediately on page load — no waiting for WebSocket
   async function loadLatest(roomId, roomNumber) {
     try {
-      const res = await fetch(`http://localhost:8000/rooms/${roomId}/latest`);
+      const res = await fetch(`https://fireflux-production.up.railway.app/rooms/${roomId}/latest`);
       if (!res.ok) return;
       const data = await res.json();
       roomLevels[roomId] = data.risk_level;
-      roomReasons[roomId] = data.reason;
       updateRoom(roomNumber, data.risk_level);
+      updateBanner(getWorstLevel(), data.reason);
     } catch(e) {
       console.log('Could not load latest for room', roomNumber);
       document.getElementById(`status-${roomNumber}`).textContent = 'OFFLINE';
     }
   }
 
-  // Wait for ALL three rooms to load before updating banner
-  async function loadAllLatest() {
-    await Promise.all([
-      loadLatest(1, 101),
-      loadLatest(2, 102),
-      loadLatest(3, 103)
-    ]);
-    updateBanner(getWorstLevel(), getWorstReason());
-  }
-
-  // WebSocket for live updates
+  // WebSocket for live updates after initial load
   function connectWS(roomId, roomNumber) {
-    const ws = new WebSocket(`ws://localhost:8000/ws/${roomId}`);
+    const ws = new WebSocket(`wss://fireflux-production.up.railway.app/ws/${roomId}`);
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.room_id !== roomId) return;
       roomLevels[roomId] = data.risk_level;
-      roomReasons[roomId] = data.reason;
       updateRoom(roomNumber, data.risk_level);
-      updateBanner(getWorstLevel(), getWorstReason());
+      updateBanner(getWorstLevel(), data.reason);
     };
     ws.onclose = () => setTimeout(() => connectWS(roomId, roomNumber), 3000);
   }
 
-  loadAllLatest();
+  // Load immediately then connect WebSocket
+  loadLatest(1, 101);
+  loadLatest(2, 102);
+  loadLatest(3, 103);
   connectWS(1, 101);
   connectWS(2, 102);
   connectWS(3, 103);

@@ -577,7 +577,7 @@
 
   // WebSocket
   function connectWS() {
-    const ws = new WebSocket('ws://localhost:8000/ws/1');
+    const ws = new WebSocket('wss://fireflux-production.up.railway.app/ws/1');
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.room_id === 1) updateBanner(data.risk_level, data.reason);
@@ -587,7 +587,7 @@
 
   async function loadLatest() {
     try {
-      const res = await fetch('http://localhost:8000/rooms/1/latest');
+      const res = await fetch('https://fireflux-production.up.railway.app/rooms/1/latest');
       if (!res.ok) return;
       const data = await res.json();
       updateBanner(data.risk_level, data.reason);
@@ -619,7 +619,7 @@
     btn.textContent = 'SENDING...';
 
     try {
-      const res = await fetch('http://localhost:8000/ingest', {
+      const res = await fetch('https://fireflux-production.up.railway.app/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ room_id: 1, temperature: temp, gas_value: gas, motion: motion })
@@ -659,7 +659,7 @@
 
     // Send safe reading to clear database state
     try {
-      await fetch('http://localhost:8000/ingest', {
+      await fetch('https://fireflux-production.up.railway.app/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ room_id: 1, temperature: 28, gas_value: 400, motion: false })

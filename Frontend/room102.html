@@ -296,7 +296,7 @@
 
   async function loadLatest() {
     try {
-      const res = await fetch(`http://localhost:8000/rooms/${ROOM_ID}/latest`);
+      const res = await fetch(`https://fireflux-production.up.railway.app/rooms/${ROOM_ID}/latest`);
       if (!res.ok) throw new Error('bad response');
       const data = await res.json();
       updateUI(data);
@@ -311,7 +311,7 @@
 
   async function loadHistory() {
     try {
-      const res = await fetch(`http://localhost:8000/rooms/${ROOM_ID}/history?limit=10`);
+      const res = await fetch(`https://fireflux-production.up.railway.app/rooms/${ROOM_ID}/history?limit=10`);
       if (!res.ok) throw new Error('bad response');
       const readings = await res.json();
 
@@ -338,7 +338,7 @@
   }
 
   function connectWS() {
-    const ws = new WebSocket(`ws://localhost:8000/ws/${ROOM_ID}`);
+    const ws = new WebSocket(`wss://fireflux-production.up.railway.app/ws/${ROOM_ID}`);
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.room_id !== ROOM_ID) return;
