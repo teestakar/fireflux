@@ -1166,6 +1166,12 @@
 
       loadLatest();
       connectWS();
+      // Show initial alert on page load
+      window.addEventListener("load", () => {
+        alert(
+          "⚠️ Note: The first simulation may take 30–60 seconds to connect to the backend. Please wait...",
+        );
+      });
     </script>
   </body>
 </html>
