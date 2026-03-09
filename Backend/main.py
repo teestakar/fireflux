@@ -384,7 +384,7 @@ def get_history(room_id: int, limit: int = 50, db: Session = Depends(get_db)):
 # ─────────────────────────────────────────────
 # GET ALL ROOMS
 # ─────────────────────────────────────────────
-@app.get("/rooms")
+@app.api_route("/rooms", methods=["GET", "HEAD"])
 def get_rooms(db: Session = Depends(get_db)):
     rooms = db.query(Room).all()
     return [
