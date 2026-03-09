@@ -275,7 +275,7 @@
   // FIX: Load latest data immediately on page load — no waiting for WebSocket
   async function loadLatest(roomId, roomNumber) {
     try {
-      const res = await fetch(`https://fireflux-production.up.railway.app/rooms/${roomId}/latest`);
+      const res = await fetch(`https://fireflux.onrender.com/rooms/${roomId}/latest`);
       if (!res.ok) return;
       const data = await res.json();
       roomLevels[roomId] = data.risk_level;
@@ -289,7 +289,7 @@
 
   // WebSocket for live updates after initial load
   function connectWS(roomId, roomNumber) {
-    const ws = new WebSocket(`wss://fireflux-production.up.railway.app/ws/${roomId}`);
+    const ws = new WebSocket(`wss://fireflux.onrender.com/ws/${roomId}`);
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       roomLevels[roomId] = data.risk_level;
