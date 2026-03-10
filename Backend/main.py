@@ -313,16 +313,15 @@ async def websocket_endpoint(websocket: WebSocket, room_id: int):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        # Tab closed → reset to safe
+        safe = SensorReadingInput(
+            room_id=room_id,
+            temperature=28.0,
+            gas_value=400.0,
+            motion=False
+        )
+        await ingest(safe, db)
 
-@app.post("/reset")
-async def reset_room(db: Session = Depends(get_db)):
-    safe_data = SensorReadingInput(
-        room_id=1,
-        temperature=28.0,
-        gas_value=400.0,
-        motion=False
-    )
-    return await ingest(safe_data, db)
 # ─────────────────────────────────────────────
 # GET LATEST READING FOR A ROOM
 # ─────────────────────────────────────────────
