@@ -2,6 +2,10 @@
 
 A real-time fire detection system built with ESP32, FastAPI, PostgreSQL, and Machine Learning.
 
+*This project was originally conceptualized as a team project.
+This repository contains my independent implementation of the system,
+including backend architecture, database design, and deployment.
+
 ## Architecture
 
 FireFlux uses a 3-layer detection architecture:
