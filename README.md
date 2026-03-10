@@ -37,7 +37,7 @@ FireFlux uses a 3-layer detection architecture:
 | Real-time | WebSockets |
 | Notifications | Telegram Bot API |
 | Frontend | HTML, CSS, JavaScript, Leaflet.js |
-| Deployment | Docker, Railway |
+| Deployment | Docker, Render, Superbase |
 
 ## Features
 
