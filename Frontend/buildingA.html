@@ -80,8 +80,16 @@
     .exit-sign.safe-exit { background: rgba(0,136,255,0.1); border: 1px solid rgba(0,136,255,0.3); color: var(--accent); }
     .exit-sign.unsafe-exit { background: rgba(255,34,68,0.1); border: 1px solid rgba(255,34,68,0.3); color: var(--danger); }
 
-    /* ROOMS */
-    .rooms-row { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; }
+    /* ROOMS — responsive grid */
+    .rooms-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    @media (min-width: 600px) {
+      .rooms-row { grid-template-columns: repeat(6, 1fr); }
+    }
+
     .room {
       border-radius: 3px; padding: 12px 8px; transition: all 0.3s ease;
       text-align: center; min-height: 88px;
@@ -254,7 +262,6 @@
     document.getElementById('banner-status').textContent = level === 'safe' ? 'ALL SAFE' : level.toUpperCase();
     banner.className = level;
 
-    // Update exit signs based on level
     const northExit = document.getElementById('exit-north-1');
     if (level === 'danger') {
       northExit.className = 'exit-sign unsafe-exit';
@@ -272,7 +279,6 @@
     return 'safe';
   }
 
-  // FIX: Load latest data immediately on page load — no waiting for WebSocket
   async function loadLatest(roomId, roomNumber) {
     try {
       const res = await fetch(`https://fireflux.onrender.com/rooms/${roomId}/latest`);
@@ -287,7 +293,6 @@
     }
   }
 
-  // WebSocket for live updates after initial load
   function connectWS(roomId, roomNumber) {
     const ws = new WebSocket(`wss://fireflux.onrender.com/ws/${roomId}`);
     ws.onmessage = (event) => {
@@ -299,7 +304,6 @@
     ws.onclose = () => setTimeout(() => connectWS(roomId, roomNumber), 3000);
   }
 
-  // Load immediately then connect WebSocket
   loadLatest(1, 101);
   loadLatest(2, 102);
   loadLatest(3, 103);
