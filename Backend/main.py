@@ -36,36 +36,14 @@ except FileNotFoundError:
     print("WARNING: fire_model.pkl not found — run train_model.py first")
 
 
-# ─────────────────────────────────────────────
-# IS 2189 RULES — used for all rooms
-# Called after ML flags an anomaly for Room 1
-# Called directly for Rooms 2 and 3
-# ─────────────────────────────────────────────
-def is2189_check(temperature: float, gas_value: float):
-    if gas_value >= 2000 or temperature >= 78:
-        reasons = []
-        if gas_value >= 2000:
-            reasons.append("Gas critically high")
-        if temperature >= 78:
-            reasons.append("Temperature critically high")
-        return "danger", ", ".join(reasons)
-    else:
-        reasons = []
-        if gas_value >= 1000:
-            reasons.append("Gas elevated")
-        if temperature >= 57:
-            reasons.append("Temperature elevated")
-        reason = ", ".join(reasons) if reasons else "Unusual pattern detected"
-        return "warning", reason
-
 
 # ─────────────────────────────────────────────
 # RISK ASSESSMENT — ML + IS 2189
 #
 # Room 1 (real ESP32):
 #   Layer 1 — Isolation Forest trained on Room 1 data
-#   Score > -0.08 → normal → SAFE
-#   Score <= -0.08 → anomaly → check IS 2189
+#   Score > -0.05 → normal → SAFE
+#   Score <= -0.05 → anomaly → check IS 2189
 #   IS 2189 crossed → DANGER
 #   IS 2189 not crossed → WARNING
 #
@@ -135,7 +113,7 @@ def assess_risk(temperature: float, gas_value: float, motion: bool, room_id: int
         reasons = []
         if gas_value >= 1000:
             reasons.append("Gas elevated")
-        if temperature >= 57:
+        if temperature >= 45:
             reasons.append("Temperature elevated")
         reason = ", ".join(reasons) if reasons else "Unusual pattern detected"
         return float(round(abs(score), 2)), "warning", reason
