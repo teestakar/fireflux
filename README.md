@@ -41,13 +41,13 @@ FireFlux uses a 3-layer detection architecture:
 
 ## Features
 
-- 📡 Real-time sensor data ingestion from ESP32
+-  Real-time sensor data ingestion from ESP32
 - 🤖 ML anomaly detection trained on building-specific data
-- 🚨 Instant Telegram alerts on danger with 5-minute cooldown
-- 🗺️ Live city dashboard with map markers per building
-- 📊 Per-room rolling history timeline
-- 🔬 Simulator panel for demo without hardware
-- 🐳 Dockerized for cloud deployment
+- Instant Telegram alerts on danger with 5-minute cooldown
+- Live city dashboard with map markers per building
+- Per-room rolling history timeline
+- Simulator panel for demo without hardware
+- Dockerized for cloud deployment
 
 ## Risk Assessment Logic
 
