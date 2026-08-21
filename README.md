@@ -1958,4 +1958,3 @@ For questions about this project:
 
 ---
 
-**Built with ❤️ by [Your Name] — 2026**
