@@ -10,14 +10,26 @@ import json
 import httpx
 import joblib
 import numpy as np
+import os
+from dotenv import load_dotenv
 
 
 # ─────────────────────────────────────────────
 # TELEGRAM CONFIG
 # ─────────────────────────────────────────────
-TELEGRAM_TOKEN = "8477835190:AAEFVIC-gDARSAh361qRj-v_ZGuqzTaGrjc"
-TELEGRAM_CHAT_ID = "5910958826"
+# ─────────────────────────────────────────────
+# TELEGRAM CONFIG
+# ─────────────────────────────────────────────
+load_dotenv()
 
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+if not TELEGRAM_TOKEN:
+    raise RuntimeError("TELEGRAM_TOKEN is not set")
+
+if not TELEGRAM_CHAT_ID:
+    raise RuntimeError("TELEGRAM_CHAT_ID is not set")
 # One alert per room per 5 minutes — avoid spam
 last_alert_time = {}
 
