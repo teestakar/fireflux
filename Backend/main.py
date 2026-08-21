@@ -15,7 +15,7 @@ import numpy as np
 # ─────────────────────────────────────────────
 # TELEGRAM CONFIG
 # ─────────────────────────────────────────────
-TELEGRAM_TOKEN = "8477835190:AAHZRP93-KQtrFVDo71pqKFzVzbPLQuj-wY"
+TELEGRAM_TOKEN = "8477835190:AAEFVIC-gDARSAh361qRj-v_ZGuqzTaGrjc"
 TELEGRAM_CHAT_ID = "5910958826"
 
 # One alert per room per 5 minutes — avoid spam
