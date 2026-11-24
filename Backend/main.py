@@ -96,8 +96,10 @@ def assess_risk(temperature: float, gas_value: float, motion: bool, room_id: int
     score = model.decision_function(X)[0]
     is_anomaly = model.predict(X)[0] == -1
 
-    if not is_anomaly:
-        # ML says normal for this room
+        # Safe only if the model says normal AND no single value is elevated
+    elevated = temperature > 45 or gas_value > 1000
+
+    if not is_anomaly and not elevated:
         return 0.0, "safe", "All readings normal"
 
     # ML flagged anomaly — check severity in 3 tiers
