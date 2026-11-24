@@ -1,6 +1,6 @@
 # 🔥 FireFlux — Real-Time IoT Fire Detection & Response System
 
-**Real-time fire detection and response with machine learning and IoT sensors.**  
+**Real-time fire detection and response with machine learning and IoT sensors.**
 ESP32 sensors → FastAPI backend → PostgreSQL → ML anomaly detection → WebSocket broadcast → browser dashboard.
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://python.org)
@@ -9,6 +9,8 @@ ESP32 sensors → FastAPI backend → PostgreSQL → ML anomaly detection → We
 [![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.3%2B-F7931E?style=flat-square)](https://scikit-learn.org)
 [![ESP32](https://img.shields.io/badge/esp32-arduino-red?style=flat-square)](https://espressif.com)
 [![License](https://img.shields.io/badge/license-MIT-yellow?style=flat-square)](#license)
+
+> **Status:** Single-sensor prototype. Evaluated on synthetic anomalies only. Not tested against real fire events.
 
 ---
 
@@ -40,15 +42,17 @@ ESP32 sensors → FastAPI backend → PostgreSQL → ML anomaly detection → We
 
 ## Overview
 
-FireFlux is a production-grade fire detection system designed for real-world buildings where **one-size-fits-all thresholds fail**. A kitchen in Kolkata runs hotter than a server room in the same building. Summer temperatures differ from winter. A single fixed threshold produces false positives in one space and misses real dangers in another.
+FireFlux is a prototype fire-risk monitoring backend for a single room sensor. Fixed thresholds are a poor fit for every space: a kitchen runs hotter than a server room, and summer readings differ from winter ones. A single threshold can produce false alarms in one place and miss real risk in another.
 
-**FireFlux solves this problem** by combining three layers of detection:
+FireFlux addresses this with three parts:
 
-1. **ML-learned building-specific baselines** (Isolation Forest) that adapt to local conditions
-2. **Real-time hardware failsafe** (onboard buzzer on ESP32) for immediate offline response
-3. **Legally compliant IS 2189 thresholds** for unambiguous danger classification
+1. **Isolation Forest anomaly model.** Learns what normal temperature and gas readings look like for the monitored space and flags readings that don't fit that pattern.
+2. **Fixed per-value safety limits.** Inspired by IS 2189. These always apply, so a single elevated value is never classed as safe, even if the model says normal.
+3. **Hardware failsafe.** A buzzer on the ESP32 that sounds locally, independent of the network.
 
-The result: **97.9% detection accuracy, 100% recall on actual fire events, <1% false alarm rate** across diverse indoor environments.
+The model answers "is this unusual for this room?" The fixed limits answer "is this dangerous or elevated?" Fire-level danger is decided by the limits, not by the model.
+
+**Evaluation:** On a time-ordered holdout with synthetic anomalies (5 random seeds), the anomaly model reaches ROC-AUC 0.98 and recall 0.90 on medium-difficulty deviations. It is weak on subtle deviations (ROC-AUC 0.69). There is no labeled fire data, so these numbers measure deviation detection, not fire detection.
 
 ---
 
@@ -56,23 +60,18 @@ The result: **97.9% detection accuracy, 100% recall on actual fire events, <1% f
 
 ### The Problem with Fixed Thresholds
 
-Traditional fire detection relies on hard-coded temperature and gas thresholds:
-- **28°C is normal in a server room.** Fire detection at 50°C catches nothing.
-- **35°C is normal in summer in Kolkata.** Fire detection at 40°C triggers alarms when someone opens a window.
-- A threshold that works for one location fails catastrophically elsewhere.
+- A reading that is normal in one room can be unusual in another.
+- A threshold tuned for one room can miss problems in another, or trigger when someone opens a window.
+- Readings also drift over time, so a model trained on old data gradually loses accuracy.
 
-### The Solution: Learning + Legal Compliance
+### The Approach: Learned Baseline + Fixed Limits
 
-FireFlux uses **Isolation Forest anomaly detection** trained on 2,854 verified readings from each room's own historical data. The model learns what *normal* looks like for *that specific room* — accounting for season, time of day, ventilation, occupancy patterns, and ambient conditions.
+| Component | Question it answers | Guarantee |
+|-----------|--------------------|-----------|
+| **Isolation Forest** | Is this reading unusual for this room? | Adapts to the room's own history |
+| **Fixed limits** | Is this reading dangerous or elevated? | Same rule every time, independent of the model |
 
-When new readings arrive, they're scored against two criteria:
-
-| Criterion | Purpose | Guarantees |
-|-----------|---------|-----------|
-| **ML Anomaly Score** | Detects unusual patterns early — catches fires before thresholds | Location-adaptive, seasonal-aware |
-| **IS 2189 Thresholds** | Legally mandated, non-negotiable danger points | Consistent across all buildings in India |
-
-A reading that's anomalous *and* approaching legal thresholds is flagged as danger. A reading that's anomalous but well below safe physical limits (e.g., 35°C in summer, 1000 ppm stable gas) is a warning, not an alarm.
+A reading the model flags as anomalous is only raised to danger if it crosses a fixed limit. A reading the model flags but that stays in a physically normal range is downgraded to safe. A single elevated value is never classed as safe, whatever the model says.
 
 ---
 
@@ -81,57 +80,46 @@ A reading that's anomalous *and* approaching legal thresholds is flagged as dang
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | **Hardware** | ESP32 DevKit V1 | WiFi microcontroller + GPIO control |
-| | DHT11 | Temperature sensor (±2°C accuracy) |
-| | MQ2 | Gas/smoke sensor (LPG, CO analogue) |
-| | HC-SR501 PIR | Motion detection (passive infrared) |
-| **Backend** | FastAPI 0.110+ | REST API + WebSocket server |
+| | DHT11 | Temperature sensor |
+| | MQ2 | Gas/smoke sensor (units depend on calibration) |
+| | HC-SR501 PIR | Motion detection (stored, not used by the model) |
+| **Backend** | FastAPI | REST API + WebSocket server |
 | | Python 3.10+ | Core runtime |
-| **Database** | PostgreSQL 15+ | Persistent sensor data + event log |
-| | SQLAlchemy | ORM + connection pooling |
-| **ML** | Scikit-learn 1.3+ | Isolation Forest model training |
-| | Pickle | Model serialization (`model.pkl`) |
-| **Real-time** | WebSockets (FastAPI) | Live browser dashboard updates |
-| **Notifications** | Telegram Bot API | Push alerts on danger (5-min cooldown) |
-| **Frontend** | HTML5 / CSS3 / JS | Pure client-side (no framework) |
-| | Leaflet.js | Interactive city map with markers |
-| | Chart.js | Live dual-axis sensor history graphs |
-| **Deployment** | Docker | Containerization for cloud |
-| | Render | Backend hosting + auto-scaling |
-| | Supabase | PostgreSQL as a service |
+| **Database** | PostgreSQL | Persistent readings, assessments, alerts |
+| | SQLAlchemy | ORM |
+| **ML** | Scikit-learn | Isolation Forest model training |
+| | joblib | Model serialization (`fire_model.pkl`) |
+| **Real-time** | WebSockets (FastAPI) | Live browser updates |
+| **Notifications** | Telegram Bot API | Push alerts on danger (5-minute cooldown per room) |
+| **Frontend** | HTML5 / CSS3 / JS | Client-side pages |
+| | Leaflet.js | Map view |
+| | Chart.js | Sensor history graphs |
+| **Deployment** | Docker | Containerization (see [Deployment](#deployment)) |
 
 ---
 
 ## Key Features
 
-✅ **Real-time Sensor Ingestion**  
-ESP32 sends DHT11, MQ2, and PIR readings every 5 seconds via HTTP POST.
+✅ **Real-time Sensor Ingestion**
+ESP32 sends temperature, gas, and motion readings to `POST /ingest`.
 
-✅ **ML Anomaly Detection**  
-Isolation Forest trained on 2,854+ verified room-specific readings. Learns building patterns, adapts seasonally, detects anomalies before thresholds.
+✅ **ML Anomaly Detection**
+Isolation Forest trained on historical temperature and gas readings. Flags readings that deviate from the learned pattern. Evaluated with a time-ordered holdout and synthetic anomalies.
 
-✅ **Hardware Failsafe**  
-Onboard buzzer on ESP32 triggers immediately on danger — works offline, no internet required.
+✅ **Fixed Safety Limits**
+Danger at temperature ≥ 78°C or gas ≥ 2000. Elevated readings (temperature > 45°C or gas > 1000) are never classed as safe, even if the model says normal.
 
-✅ **3-Layer Risk Architecture**  
-Hardware → ML anomaly detection → IS 2189 compliance. Each layer is independent; system functions with any single layer.
+✅ **Hardware Failsafe**
+Onboard buzzer on the ESP32 triggers locally on danger, without requiring the network.
 
-✅ **Instant Telegram Alerts**  
-Push notifications on danger events with 5-minute cooldown. Includes room name, risk level, sensor values, timestamp.
+✅ **Telegram Alerts**
+Notifications on danger with a 5-minute per-room cooldown. Includes room, reason, sensor values, and time.
 
-✅ **Live Web Dashboard**  
-- City-level map view (Leaflet.js markers per building)
-- Floor plan with room status tiles
-- Per-room live dashboard: animated sensor bars, risk score ring, 50-reading history chart, timestamp timeline
-- Offline-aware UI (graceful degradation if backend unreachable)
+✅ **Live Web Dashboard**
+Browser pages subscribe to the WebSocket and update as readings arrive.
 
-✅ **Event Lifecycle Tracking**  
-Danger events are bounded in the database — automatically opened when danger is detected, closed when readings return to safe. Queryable by duration.
-
-✅ **Simulator Panel**  
-Demo the system without hardware — sliders for temperature and gas, motion toggle. Pre-populated with realistic test scenarios.
-
-✅ **Production-Ready Deployment**  
-Dockerized FastAPI app, environment variables for secrets, graceful WebSocket reconnection (3-second exponential backoff), connection pooling, SQL injection protection via ORM.
+✅ **Simulator Panel**
+Test the system without hardware by sending readings through Swagger or `POST /ingest`.
 
 ---
 
@@ -139,42 +127,40 @@ Dockerized FastAPI app, environment variables for secrets, graceful WebSocket re
 
 ```
                     ┌──────────────────────────────────────────────────────┐
-                    │                  FireFlux System                      │
+                    │                  FireFlux System                     │
                     │                                                      │
-  ┌──────────────┐  │  ┌────────────────────────────────────────────────┐ │
-  │    ESP32     │  │  │              FastAPI :8000                     │ │
-  │              │  │  │                                                │ │
-  │  DHT11 ──┐   │  │  │  POST /sensor-data (from hardware)             │ │
-  │  MQ2  ──┼───┼──┼──►│  POST /ingest (REST API)                       │ │
-  │  PIR  ──┘   │  │  │         │                                       │ │
-  │             │  │  │         ├─► assess_risk()                       │ │
-  │  🔊Buzzer   │  │  │         │       ├─► ML anomaly score            │ │
-  │  (offline)  │  │  │         │       ├─► IS 2189 thresholds          │ │
-  └─────────────┘  │  │         │       └─► risk_level + reason         │ │
-                   │  │         │                                       │ │
-  ┌─────────────┐  │  │         ├─► danger_event logic                  │ │
-  │ Python Sim  │  │  │         │       ├─► Open events on danger       │ │
-  │(Rooms 2, 3) │──┼──►         │       └─► Close events on safe        │ │
-  └─────────────┘  │  │         │                                       │ │
-                   │  │         ├─► Telegram alert (5-min cooldown)     │ │
-                   │  │         │                                       │ │
-                   │  │         ├─► PostgreSQL                          │ │
-                   │  │         │   ┌─────────────────────────────┐     │ │
-                   │  │         └──►│ 5 tables:                   │     │ │
-                   │  │             │ • rooms                     │     │ │
-                   │  │             │ • sensor_readings           │     │ │
-                   │  │             │ • risk_assessments          │     │ │
-                   │  │             │ • danger_events             │     │ │
-                   │  │             │ • alerts                    │     │ │
-                   │  │             └─────────────────────────────┘     │ │
-                   │  │                                                │ │
-                   │  └─────────────────┬───────────────────────────────┘ │
-                   │                    │                                  │
-                   │                    ▼                                  │
+  ┌──────────────┐  │  ┌────────────────────────────────────────────────┐  │
+  │    ESP32     │  │  │              FastAPI :8000                     │  │
+  │              │  │  │                                                │  │
+  │  DHT11 ──┐   │  │  │  POST /ingest (from hardware and REST)         │  │
+  │  MQ2  ──┼───┼──┼──►│         │                                      │  │
+  │  PIR  ──┘   │  │  │         │                                      │  │
+  │             │  │  │         ├─► assess_risk()                      │  │
+  │  🔊Buzzer   │  │  │         │       ├─► Isolation Forest           │  │
+  │  (offline)  │  │  │         │       ├─► fixed safety limits        │  │
+  └─────────────┘  │  │         │       └─► risk_level + reason        │  │
+                   │  │         │                                      │  │
+  ┌─────────────┐  │  │         ├─► alert logic                        │  │
+  │ Python Sim  │  │  │         │       └─► danger → alert row         │  │
+  │(Rooms 2, 3) │──┼──►         │                                      │  │
+  └─────────────┘  │  │         ├─► Telegram alert (5-min cooldown)    │  │
+                   │  │         │                                      │  │
+                   │  │         ├─► PostgreSQL                         │  │
+                   │  │         │   ┌─────────────────────────────┐    │  │
+                   │  │         └──►│ 4 tables:                   │    │  │
+                   │  │             │ • rooms                     │    │  │
+                   │  │             │ • readings                  │    │  │
+                   │  │             │ • risk_assessments          │    │  │
+                   │  │             │ • alerts                    │    │  │
+                   │  │             └─────────────────────────────┘    │  │
+                   │  │                                                │  │
+                   │  └─────────────────┬──────────────────────────────┘  │
+                   │                    │                                 │
+                   │                    ▼                                 │
                    │  ┌────────────────────────────────────────────────┐  │
-                   │  │   WebSocket Broadcast (ws://<host>:8000/ws)   │  │
-                   │  │   Per room: risk_level, temp, gas, motion     │  │
-                   │  └─────────────────┬────────────────────────────┘  │
+                   │  │   WebSocket Broadcast (ws://<host>:8000/ws)    │  │
+                   │  │   Sent to all clients; clients filter by room  │  │
+                   │  └─────────────────┬──────────────────────────────┘  │
                    │                    │                                 │
                    │                    ▼                                 │
                    │  ┌────────────────────────────────────────────────┐  │
@@ -182,8 +168,8 @@ Dockerized FastAPI app, environment variables for secrets, graceful WebSocket re
                    │  │  ┌──────────────────────────────────────────┐  │  │
                    │  │  │  index.html (city dashboard)             │  │  │
                    │  │  │  • Leaflet.js map                        │  │  │
-                   │  │  │  • Building status cards (RGB)           │  │  │
-                   │  │  │  • Simulator panel (temp/gas/motion)     │  │  │
+                   │  │  │  • Building status cards                 │  │  │
+                   │  │  │  • Simulator panel (temp/gas)            │  │  │
                    │  │  └──────────────────────────────────────────┘  │  │
                    │  │  ┌──────────────────────────────────────────┐  │  │
                    │  │  │  buildingA.html (floor plan)             │  │  │
@@ -192,11 +178,9 @@ Dockerized FastAPI app, environment variables for secrets, graceful WebSocket re
                    │  │  └──────────────────────────────────────────┘  │  │
                    │  │  ┌──────────────────────────────────────────┐  │  │
                    │  │  │  room10X.html (per-room dashboard)       │  │  │
-                   │  │  │  • Animated sensor bars                  │  │  │
-                   │  │  │  • Risk score ring                       │  │  │
-                   │  │  │  • 50-reading history chart (Chart.js)   │  │  │
-                   │  │  │  • Timeline table (live prepend)         │  │  │
-                   │  │  │  • Recommendation text                   │  │  │
+                   │  │  │  • Sensor bars                           │  │  │
+                   │  │  │  • Chart of recent readings              │  │  │
+                   │  │  │  • Timeline table                        │  │  │
                    │  │  └──────────────────────────────────────────┘  │  │
                    │  └────────────────────────────────────────────────┘  │
                    └──────────────────────────────────────────────────────┘
@@ -206,96 +190,80 @@ Dockerized FastAPI app, environment variables for secrets, graceful WebSocket re
 
 ## 3-Layer Detection System
 
-FireFlux uses three independent detection layers. Each is sufficient on its own; together they provide defense-in-depth.
+FireFlux has three layers. The model and the fixed limits both run on the server. The buzzer runs on the ESP32 independently of the server.
 
 ### Layer 1: Hardware Failsafe (ESP32 Onboard)
 
-**Goal:** Immediate offline response — no network required.
+**Goal:** A local alarm that does not depend on WiFi or the server.
 
 ```cpp
-// Runs on ESP32, independent of WiFi/network
+// Runs on the ESP32 (verify against firmware/esp32_sensor.ino)
 if (temperature >= 78 || gas_value >= 2000) {
-    digitalWrite(BUZZER_PIN, HIGH);  // Immediate alarm
-    delay(500);
-    digitalWrite(BUZZER_PIN, LOW);
-    // Continues buzzing every 3 seconds until reset
+    digitalWrite(BUZZER_PIN, HIGH);
+    // Buzzer behavior, such as repeat interval, is defined in the firmware
 }
 ```
 
 **Guarantees:**
-- ✅ Works offline (no internet dependency)
-- ✅ ~10ms response time (hardware-level reaction)
-- ✅ Day 1 functional (before ML model is trained)
-- ⚠️ Prone to false alarms in hot environments (e.g., summer kitchen)
+- Works without internet access.
+- Does not depend on the Python backend or the trained model.
+- Its thresholds should match Layer 3 so the two layers agree.
 
 ---
 
-### Layer 2: Machine Learning Anomaly Detection (FastAPI + Scikit-learn)
+### Layer 2: Isolation Forest Anomaly Detection (FastAPI + Scikit-learn)
 
-**Goal:** Learn building-specific patterns; detect anomalies early.
+**Goal:** Learn what normal looks like for the monitored sensor and flag readings that don't fit.
 
-**Training:**
+**Features:** `temperature` and `gas_value` only. Motion was removed from the model because it caused false warnings during testing.
+
+**Training** (`train_model.py`):
+
 ```python
-# train_model.py
-from sklearn.ensemble import IsolationForest
-import pickle
-
-# Load 2,854 verified readings from sensor_readings table
-readings = fetch_room_readings(room_id, limit=2854)
-X = readings[['temperature', 'gas_value', 'motion_int']].values
-
-# Train per-room model
-model = IsolationForest(
-    n_estimators=100,
-    contamination=0.05,  # Assume 5% of historical data is anomalous
-    random_state=42
-)
-model.fit(X)
-
-# Serialize
-with open('models/room_1_model.pkl', 'wb') as f:
-    pickle.dump(model, f)
+model = IsolationForest(contamination=0.02, n_estimators=100, random_state=42)
+model.fit(df[["temperature", "gas_value"]])
+joblib.dump(model, "fire_model.pkl")
 ```
 
-**Inference:**
+**Inference** (`main.py`):
+
 ```python
-# In assess_risk()
-anomaly_score = model.decision_function([[temperature, gas_value, motion]])
-# Score ranges [-1, +1]; negative = anomalous, positive = normal
-# Typical threshold: > -0.05 is normal
+X = pd.DataFrame([[temperature, gas_value]], columns=["temperature", "gas_value"])
+is_anomaly = model.predict(X)[0] == -1
 ```
+
+The decision uses the cutoff the model learned during training (`model.offset_`), not a hardcoded number.
 
 **Advantages:**
-- ✅ Learns room-specific baselines (summer vs. winter, office vs. kitchen)
-- ✅ Detects subtle pattern shifts (e.g., slow CO accumulation)
-- ✅ Reduces false alarms by 90%+ vs. fixed thresholds
-- ✅ Adapts over time (retrain weekly/monthly)
-- ⚠️ Requires 7–14 days of baseline data (calibration period)
+- Learns a baseline from the room's own history.
+- Needs no labeled data to train.
+- Simple to explain and to evaluate.
+
+**Limitations:**
+- Learns a single baseline for the one sensor it was trained on.
+- The baseline is frozen at training time. Retrain as new data arrives.
+- Subtle deviations (for example, a 2–3°C shift) are mostly missed.
 
 ---
 
-### Layer 3: IS 2189 Rule-Based Compliance (FastAPI + Database)
+### Layer 3: Fixed Safety Limits (FastAPI)
 
-**Goal:** Legally mandated thresholds for unambiguous danger classification.
+**Goal:** Guarantee that dangerous or elevated readings are never classed as safe, regardless of the model.
 
-**Indian Standard IS 2189-1:** *Fire detection and alarm system — Code of practice*
+**Limits in use** (inspired by IS 2189; design values, not a certified compliance implementation):
 
 ```
-Danger (alert authority immediately):
-  temperature >= 78°C  OR  gas_value >= 2000 ppm
-
-Warning (monitor closely):
-  temperature >= 57°C  OR  gas_value >= 1000 ppm
-
-Safe:
-  Otherwise
+Danger:    temperature ≥ 78°C   OR  gas ≥ 2000
+Elevated:  temperature > 45°C   OR  gas > 1000
+Safe:      model says normal AND no value elevated
 ```
 
 **Advantages:**
-- ✅ Legally binding (cannot be challenged)
-- ✅ Consistent across all Indian buildings
-- ✅ Independent of ML model (always works, even if model is untrained)
-- ✅ Explainable and auditable
+- Same rule every time, independent of model training.
+- Easy to read, explain, and change.
+- Works even if the model file is missing.
+
+**Note:** Gas units depend on MQ2 calibration. The 2000 and 1000 limits are in the sensor's current units and need recalibration against a known reference before they mean ppm.
 
 ---
 
@@ -306,582 +274,267 @@ fireflux/
 ├── README.md                    # This file
 ├── Backend/
 │   ├── main.py                  # FastAPI app, routes, WebSocket manager, risk engine
-│   ├── train_model.py           # ML training: fetch data, fit Isolation Forest, pickle
-│   ├── requirements.txt         # pip dependencies
-│   ├── Dockerfile               # Multi-stage Docker build
-│   ├── .env.example             # Environment variables template
+│   ├── train_model.py           # Loads readings, fits Isolation Forest, saves fire_model.pkl
+│   ├── evaluate_model.py        # Time-ordered evaluation with synthetic anomalies
+│   ├── fire_model.pkl           # Trained model (generated, not committed)
+│   ├── .env                     # Local secrets (not committed)
 │   ├── ingestion/
-│   │   ├── database.py          # SQLAlchemy engine, SessionLocal, connection pooling
-│   │   ├── database_models.py   # ORM table definitions (Room, SensorReading, etc.)
-│   │   └── models.py            # Pydantic input/output schemas
-│   └── models/
-│       ├── room_1_model.pkl     # Pickled Isolation Forest (trained)
-│       ├── room_2_model.pkl
-│       └── room_3_model.pkl
+│   │   ├── database.py          # SQLAlchemy engine, SessionLocal
+│   │   ├── database_models.py   # ORM tables (Room, Reading, RiskAssessment, Alert)
+│   │   └── models.py            # Pydantic input schema
+│   ├── Dockerfile               # Only if you have built it (see Deployment)
+│   └── requirements.txt         # Only if you have generated it with pip freeze
 │
 ├── firmware/
-│   └── esp32_sensor.ino         # Arduino sketch for ESP32 (DHT11, MQ2, PIR, buzzer)
+│   └── esp32_sensor.ino         # Arduino sketch for ESP32
 │
-├── frontend/
-│   ├── index.html               # City dashboard (Leaflet map + simulator)
-│   ├── buildingA.html           # Floor plan view
-│   ├── room101.html             # Room dashboard (room_id = 1)
-│   ├── room102.html             # Room dashboard (room_id = 2)
-│   └── room103.html             # Room dashboard (room_id = 3)
-│
-└── docs/
-    ├── architecture.md          # System design deep-dive
-    ├── ml_training.md           # ML pipeline and hyperparameter tuning
-    └── deployment.md            # Cloud deployment on Render + Supabase
+└── frontend/                    # Browser dashboard pages
 ```
 
 ---
 
 ## Database Schema
 
-All tables are created automatically on first app startup via `Base.metadata.create_all(bind=engine)`.  
-Room rows are seeded by `seed_rooms()` if the `rooms` table is empty.
+Tables are created automatically on startup by `Base.metadata.create_all(bind=engine)`. The column definitions live in `ingestion/database_models.py`, which is the source of truth. The summary below matches what `main.py` reads and writes.
 
 ### `rooms`
-```sql
-CREATE TABLE rooms (
-    id           SERIAL PRIMARY KEY,
-    name         VARCHAR(100) NOT NULL,
-    floor        INTEGER NOT NULL,
-    description  VARCHAR(255),
-    building_id  INTEGER,
-    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
 
-**Example data:**
-```
-id | name     | floor | description      | building_id
-1  | Lab 101  | 1     | Hardware lab     | 1
-2  | Lab 102  | 1     | Storage room    | 1
-3  | Lab 103  | 2     | Server room     | 1
-```
+| Column | Purpose |
+|--------|---------|
+| `id` | Room identifier (primary key) |
+| `name` | Display name |
+| `floor` | Floor number |
+| `exits` | Exit information shown on alerts |
 
----
+### `readings`
 
-### `sensor_readings`
-```sql
-CREATE TABLE sensor_readings (
-    id           SERIAL PRIMARY KEY,
-    room_id      INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    temperature  FLOAT NOT NULL,          -- Celsius
-    gas_value    FLOAT NOT NULL,          -- ppm
-    motion       BOOLEAN NOT NULL,        -- True if motion detected in last 5s
-    recorded_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES rooms(id)
-);
-```
+One row per sensor reading.
 
-**Typical volume:** 12 readings/minute × 3 rooms × 24 hours = ~51,840 rows/day.
-
----
+| Column | Purpose |
+|--------|---------|
+| `id` | Primary key |
+| `room_id` | Room the reading came from |
+| `temperature` | Degrees Celsius |
+| `gas_value` | Gas reading (units depend on calibration) |
+| `motion` | Motion flag from PIR |
+| `timestamp` | When the reading was stored |
 
 ### `risk_assessments`
-```sql
-CREATE TABLE risk_assessments (
-    id           SERIAL PRIMARY KEY,
-    room_id      INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    risk_score   FLOAT NOT NULL,          -- 0.0 to 1.0
-    risk_level   VARCHAR(10) NOT NULL,    -- 'safe' | 'warning' | 'danger'
-    ml_score     FLOAT,                   -- Isolation Forest anomaly score
-    reason       TEXT NOT NULL,           -- Human-readable explanation
-    assessed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
 
-**Example:**
-```
-id | room_id | risk_score | risk_level | ml_score | reason                           | assessed_at
-1  | 1       | 0.0        | safe       | 0.42     | All readings normal              | 2026-03-10 20:42:15
-2  | 1       | 0.9        | danger     | -0.98    | High temp (89°C) + high gas      | 2026-03-10 20:47:15
-```
+One row per reading, written right after it.
 
----
-
-### `danger_events`
-```sql
-CREATE TABLE danger_events (
-    id           SERIAL PRIMARY KEY,
-    room_id      INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    trigger      VARCHAR(100) NOT NULL,   -- 'high_temp' | 'high_gas' | 'anomaly'
-    started_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    ended_at     TIMESTAMP DEFAULT NULL,  -- NULL = still active
-    FOREIGN KEY (room_id) REFERENCES rooms(id)
-);
-```
-
-**Event Lifecycle:**
-
-```python
-# When risk_level == "danger" arrives:
-if risk_level == "danger":
-    open_event = db.query(DangerEvent).filter(
-        DangerEvent.room_id == room_id,
-        DangerEvent.ended_at == None  # ← Not yet closed
-    ).first()
-    if not open_event:  # ← Only one open event per room
-        db.add(DangerEvent(
-            room_id=room_id,
-            trigger=reason  # e.g., "High temperature (89°C)"
-        ))
-        db.commit()
-        # Send Telegram alert here
-
-# When risk_level == "safe" arrives:
-else:
-    open_event = db.query(DangerEvent).filter(
-        DangerEvent.room_id == room_id,
-        DangerEvent.ended_at == None
-    ).first()
-    if open_event:
-        open_event.ended_at = datetime.utcnow()
-        db.commit()
-        # Send "All clear" Telegram alert
-```
-
-**Guarantees:** Each room can have at most one open event. Danger incidents are bounded in time and queryable by duration.
-
----
+| Column | Purpose |
+|--------|---------|
+| `id` | Primary key |
+| `reading_id` | The reading this assessment belongs to |
+| `room_id` | Room ID |
+| `risk_score` | Score (see [Risk Assessment Engine](#risk-assessment-engine)) |
+| `risk_level` | `safe`, `warning`, or `danger` |
+| `reason` | Human-readable explanation |
 
 ### `alerts`
-```sql
-CREATE TABLE alerts (
-    id           SERIAL PRIMARY KEY,
-    room_id      INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    event_id     INTEGER REFERENCES danger_events(id) ON DELETE SET NULL,
-    channel      VARCHAR(20) NOT NULL,    -- 'telegram' | 'email' | 'sms'
-    message      TEXT NOT NULL,
-    sent_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    delivery_status VARCHAR(20) DEFAULT 'pending',  -- 'sent' | 'failed'
-    retry_count  INTEGER DEFAULT 0,
-    FOREIGN KEY (room_id) REFERENCES rooms(id)
-);
-```
+
+One row per danger event that triggered an alert.
+
+| Column | Purpose |
+|--------|---------|
+| `id` | Primary key |
+| `room_id` | Room ID |
+| `risk_assessment_id` | The assessment that triggered the alert |
+| `message` | Alert text |
+| `unsafe_exits` | Exit information from the room |
+| `notified` | Whether the Telegram message was sent |
+| `created_at` | When the alert was created |
+
+**Deleting data:** `alerts` and `risk_assessments` reference `readings`. Delete child rows first, or PostgreSQL will refuse the delete.
 
 ---
 
 ## Risk Assessment Engine
 
-### `assess_risk()` Function
+### `assess_risk()` (main.py)
 
-Located in `main.py`, this is the core decision-making logic.
+Returns `risk_level` (`safe`, `warning`, or `danger`), `risk_score`, and `reason`.
 
-```python
-def assess_risk(
-    temperature: float,
-    gas_value: float,
-    motion: bool,
-    room_id: int,
-    ml_model: IsolationForest = None
-) -> dict:
-    """
-    Assess room risk using 3-layer architecture:
-    1. ML anomaly detection (if model loaded)
-    2. IS 2189 thresholds (legal compliance)
-    3. Physics-based bounds check (sanity)
-    """
-    
-    # Layer 1: ML Anomaly Detection
-    ml_score = None
-    if ml_model:
-        ml_score = ml_model.decision_function([[temperature, gas_value, int(motion)]])[0]
-        # ml_score > -0.05 = normal, ml_score < -0.05 = anomalous
-    
-    # Layer 2: IS 2189 Rule-Based (always evaluated)
-    reasons = []
-    
-    if temperature >= 78:
-        reasons.append(f"High temperature ({temperature}°C)")
-    elif temperature >= 57:
-        reasons.append(f"Elevated temperature ({temperature}°C)")
-    
-    if gas_value >= 2000:
-        reasons.append(f"High gas ({gas_value} ppm)")
-    elif gas_value >= 1000:
-        reasons.append(f"Elevated gas ({gas_value} ppm)")
-    
-    # Layer 3: Determine Risk Level
-    if (temperature >= 78 or gas_value >= 2000):
-        risk_level = "danger"
-        risk_score = 0.9
-    elif (temperature >= 57 or gas_value >= 1000):
-        risk_level = "warning"
-        risk_score = 0.5
-    else:
-        risk_level = "safe"
-        risk_score = 0.0
-    
-    # Physics bounds check: if temp is very low and gas is low, ignore ML flag
-    if temperature <= 45 and gas_value <= 1000:
-        if ml_score and ml_score < -0.05:
-            risk_level = "safe"  # Override to safe
-    
-    reason = ", ".join(reasons) if reasons else "All readings normal"
-    
-    return {
-        "room_id": room_id,
-        "temperature": temperature,
-        "gas_value": gas_value,
-        "motion": motion,
-        "risk_score": risk_score,
-        "risk_level": risk_level,
-        "ml_score": ml_score,
-        "reason": reason,
-        "timestamp": datetime.utcnow().isoformat()
-    }
-```
+**Room 1 (model + limits):**
 
-### Decision Tree
+1. If `fire_model.pkl` is not loaded, use the danger limits only.
+2. Ask the model whether the reading is anomalous.
+3. If the reading is normal **and** no value is elevated → `safe`.
+4. If a danger limit is crossed → `danger`.
+5. If the model flagged it, but temperature ≤ 45 and gas ≤ 1000 → `safe` (mild model flag in a physically normal range).
+6. Otherwise → `warning`.
+
+**Rooms 2 and 3 (no model):** `danger` if gas ≥ 2000 or temperature ≥ 78; otherwise `safe`.
+
+### Decision Tree (Room 1)
 
 ```
-Input: temperature, gas_value, motion, room_id
+Input: temperature, gas_value
 
-┌─ temperature >= 78  OR  gas_value >= 2000?
-│  ├─ YES → DANGER (risk_score = 0.9)
-│  │        "High temp" OR "High gas" OR both
-│  │
-│  └─ NO  → Continue...
+┌─ Model not loaded?
+│  ├─ YES → danger if gas ≥ 2000 or temp ≥ 78, else safe
+│  └─ NO  → continue
 │
-├─ temperature >= 57  OR  gas_value >= 1000?
-│  ├─ YES → WARNING (risk_score = 0.5)
-│  │        "Elevated temp" OR "Elevated gas"
-│  │
-│  └─ NO  → Continue...
+├─ Model says normal AND no value elevated?
+│  ├─ YES → SAFE
+│  └─ NO  → continue
 │
-└─ SAFE (risk_score = 0.0)
-   "All readings normal"
+├─ Gas ≥ 2000 or temp ≥ 78?
+│  ├─ YES → DANGER
+│  └─ NO  → continue
+│
+├─ Temp ≤ 45 AND gas ≤ 1000?
+│  ├─ YES → SAFE (mild model flag)
+│  └─ NO  → continue
+│
+└─ WARNING
 ```
+
+### Risk Score
+
+`risk_score` is not a calibrated probability.
+- For model-driven results, it is the absolute value of the model's decision score, rounded.
+- For danger from the fixed limits, it is 0.9.
+- For safe, it is 0.0.
 
 ---
 
 ## Machine Learning Pipeline
 
-### Training Workflow
+### Training
 
-**Step 1: Data Collection**
-
-FireFlux collects baseline data for 7–14 days before ML kicks in. The `sensor_readings` table accumulates ~51,840 rows per room per day.
-
-```sql
-SELECT temperature, gas_value, motion
-FROM sensor_readings
-WHERE room_id = 1
-  AND recorded_at > NOW() - INTERVAL '14 days'
-ORDER BY recorded_at;
+```powershell
+python train_model.py
 ```
 
-**Step 2: Feature Preparation**
+This loads all rows from `readings`, fits one Isolation Forest on `temperature` and `gas_value`, and saves `fire_model.pkl` in `Backend/`. Restart the server afterwards so it loads the new file.
 
-```python
-import pandas as pd
-from sqlalchemy import create_engine
+**Data cleaning before training:** Rows with temperature ≥ 45 or gas ≥ 1000 were removed from `readings` before the final training. These were test inserts and out-of-range values. Leaving them in taught the model that high readings were normal, so it labeled a 31°C / 1359 gas reading as safe.
 
-engine = create_engine(DATABASE_URL)
-df = pd.read_sql_query(
-    """SELECT temperature, gas_value, motion 
-       FROM sensor_readings 
-       WHERE room_id = 1 AND recorded_at > NOW() - INTERVAL '14 days'""",
-    engine
-)
+### Model Settings
 
-# Normalize features (Isolation Forest is sensitive to scale)
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X = scaler.fit_transform(df[['temperature', 'gas_value', 'motion']])
+| Setting | Value | Reason |
+|---------|-------|--------|
+| `n_estimators` | 100 | Standard default, stable results |
+| `contamination` | 0.02 | Expects about 2% of training data to look unusual |
+| `random_state` | 42 | Reproducible training |
+| Features | `temperature`, `gas_value` | Motion caused false warnings |
+
+### Drift and Retraining
+
+The baseline is fixed when the model is trained. If the room changes (sensor placement, usage, season), the false-alarm rate rises. Retrain on recent normal data to keep the baseline current.
+
+### Data Variety
+
+A single sensor produces readings that cluster tightly, so more rows from the same room add little new information. Time coverage (different times of day, usage patterns, and seasons) matters more than row count.
+
+### Evaluation
+
+Evaluation is in `evaluate_model.py`:
+
+```powershell
+python evaluate_model.py
 ```
 
-**Step 3: Model Training**
+**Method**
 
-```python
-from sklearn.ensemble import IsolationForest
-import pickle
+- **Split:** time-ordered. The oldest 80% of rows train the model. The newest 20% form the normal test set. The test set is never seen during training.
+- **Synthetic anomalies** (300 per difficulty band), generated from the test data:
+  - *Easy:* temperature 50–100°C, gas 1500–3000. Far outside any normal reading.
+  - *Medium:* both features shifted by 3–5 robust standard deviations from real normal readings.
+  - *Hard:* one feature shifted by 1.5–2.5 robust standard deviations.
+- **Robust spread:** median absolute deviation (MAD), so outliers don't inflate the spread.
+- **Repeats:** 5 random seeds, reported as mean ± standard deviation.
 
-model = IsolationForest(
-    n_estimators=100,      # 100 trees (balanced performance/accuracy)
-    contamination=0.05,    # Assume 5% of data is anomalous
-    random_state=42,       # Reproducibility
-    n_jobs=-1              # Use all CPU cores
-)
-model.fit(X)
+**Results** (medium-difficulty synthetic anomalies, 5 seeds, cleaned data: about 2,221 training rows and 556 test rows)
 
-# Serialize to disk
-with open(f'models/room_{room_id}_model.pkl', 'wb') as f:
-    pickle.dump({
-        'model': model,
-        'scaler': scaler,
-        'room_id': room_id,
-        'trained_at': datetime.utcnow().isoformat()
-    }, f)
-```
+| Metric | Value | What it means |
+|--------|-------|---------------|
+| ROC-AUC | 0.978 ± 0.008 | Chance a random anomaly scores higher than a random normal reading |
+| PR-AUC | 0.957 ± 0.016 | Precision–recall area; informative when anomalies are rare |
+| Recall | 0.905 ± 0.030 | Share of anomalies caught |
+| Precision | 0.896 ± 0.015 | Share of flagged readings that were anomalies |
+| F1 | 0.900 ± 0.015 | Balance of precision and recall |
+| False-positive rate | 0.057 ± 0.010 | Share of normal test readings flagged (optimistic; see below) |
 
-**Step 4: Load at Startup**
+**Hard-difficulty anomalies:** ROC-AUC 0.693 ± 0.010, recall 0.222 ± 0.015. The model misses most subtle deviations.
 
-```python
-# In main.py startup
-import pickle
+**Easy-difficulty anomalies:** ROC-AUC 1.000, recall 1.000. Expected, but says little about real performance.
 
-models = {}
-for room_id in [1, 2, 3]:
-    try:
-        with open(f'models/room_{room_id}_model.pkl', 'rb') as f:
-            data = pickle.load(f)
-            models[room_id] = data['model']
-            print(f"✓ Loaded model for room {room_id}")
-    except FileNotFoundError:
-        print(f"⚠ No model for room {room_id}; using rule-based detection only")
-        models[room_id] = None
-```
+**Interpretation**
 
-### Hyperparameter Tuning
-
-```python
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import confusion_matrix, roc_auc_score
-
-# Grid search
-param_grid = {
-    'n_estimators': [50, 100, 200],
-    'contamination': [0.03, 0.05, 0.07],
-}
-
-best_score = -np.inf
-best_params = {}
-
-for n_est in param_grid['n_estimators']:
-    for cont in param_grid['contamination']:
-        model = IsolationForest(
-            n_estimators=n_est,
-            contamination=cont,
-            random_state=42
-        )
-        scores = cross_val_score(model, X, cv=5, scoring='f1')
-        if scores.mean() > best_score:
-            best_score = scores.mean()
-            best_params = {'n_estimators': n_est, 'contamination': cont}
-
-print(f"Best params: {best_params}, F1 score: {best_score}")
-```
-
-### Performance Metrics
-
-On 2,854 verified readings:
-
-```
-Precision (danger):  100%      (no false positives on real fire)
-Recall (danger):     100%      (catches all real fires)
-Accuracy:            97.9%     (correct classification overall)
-F1 Score:            0.909     (balanced precision/recall)
-False Alarm Rate:    <1%       (only 28 false warnings per year)
-```
+- **No labeled fire data exists.** These numbers measure deviation from the room's learned baseline, not fire detection.
+- **The false-positive rate is optimistic.** The cleanup removed every row with temperature ≥ 45 or gas ≥ 1000, so the normal test rows are all low readings. Real false-alarm rates are likely higher.
+- **Accuracy is not reported.** Most readings are normal, so a weak model can still score high accuracy.
+- **Results depend on one sensor's history.** They would change with different data.
 
 ---
 
 ## API Reference
 
-### Base URL
-```
-http://<host>:8000
-Swagger UI: http://<host>:8000/docs
-```
+**Base URL:** `http://<host>:8000`
+**Interactive docs:** `http://<host>:8000/docs`
 
-### Ingestion Endpoints
+### `POST /ingest`
 
-#### `POST /sensor-data`
-**Purpose:** Primary endpoint for ESP32 hardware.  
-**Response:** 200 OK, no body returned (fire-and-forget).
+Saves a reading, runs the risk assessment, stores the result, sends an alert on danger, and broadcasts to WebSocket clients.
 
-```bash
-curl -X POST http://localhost:8000/sensor-data \
-  -H "Content-Type: application/json" \
-  -d '{
-    "room_id": 1,
-    "temperature": 28.5,
-    "gas_value": 400.0,
-    "motion": false
-  }'
+**Request:**
+```json
+{
+  "room_id": 1,
+  "temperature": 28.0,
+  "gas_value": 400.0,
+  "motion": false
+}
 ```
 
----
-
-#### `POST /ingest`
-**Purpose:** REST API endpoint for manual testing / simulators.  
-**Response:** Full risk assessment payload.
+**Response:**
+```json
+{
+  "status": "saved",
+  "reading_id": 2860,
+  "risk_score": 0.12,
+  "risk_level": "danger",
+  "reason": "Gas critically high, Temperature critically high"
+}
+```
 
 ```bash
 curl -X POST http://localhost:8000/ingest \
   -H "Content-Type: application/json" \
-  -d '{
-    "room_id": 1,
-    "temperature": 28.5,
-    "gas_value": 400.0,
-    "motion": false
-  }'
+  -d '{"room_id": 1, "temperature": 28.0, "gas_value": 400.0, "motion": false}'
 ```
 
-**Response:**
+### `GET /rooms`
+
+Lists all rooms with `id`, `name`, `floor`, and `exits`.
+
+### `GET /rooms/{room_id}/latest`
+
+The latest reading for a room with its risk level and reason. Returns 404 if the room has no data.
+
 ```json
 {
   "room_id": 1,
-  "temperature": 28.5,
+  "temperature": 28.0,
   "gas_value": 400.0,
   "motion": false,
+  "timestamp": "2026-03-10T20:42:15.123456",
   "risk_score": 0.0,
   "risk_level": "safe",
-  "ml_score": 0.42,
-  "reason": "All readings normal",
-  "timestamp": "2026-03-10T20:42:15.123456"
+  "reason": "All readings normal"
 }
 ```
 
----
+### `GET /rooms/{room_id}/history?limit=50`
 
-### Query Endpoints
+Recent readings for a room with their risk levels, newest first. Each item has `id`, `temperature`, `gas_value`, `motion`, `timestamp`, `risk_level`, `risk_score`, and `reason`.
 
-#### `GET /rooms`
-**Purpose:** List all monitored rooms.
+### `GET /alerts`
 
-```bash
-curl http://localhost:8000/rooms
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "name": "Lab 101",
-    "floor": 1,
-    "description": "Hardware lab",
-    "building_id": 1,
-    "created_at": "2026-01-15T10:00:00"
-  },
-  ...
-]
-```
-
----
-
-#### `GET /rooms/{room_id}/latest`
-**Purpose:** Latest sensor reading + risk for one room.
-
-```bash
-curl http://localhost:8000/rooms/1/latest
-```
-
-**Response:**
-```json
-{
-  "room_id": 1,
-  "temperature": 28.5,
-  "gas_value": 400.0,
-  "motion": false,
-  "risk_score": 0.0,
-  "risk_level": "safe",
-  "ml_score": 0.42,
-  "reason": "All readings normal",
-  "timestamp": "2026-03-10T20:42:15.123456"
-}
-```
-
----
-
-#### `GET /rooms/{room_id}/history?limit=50`
-**Purpose:** Last N readings with risk assessments (for charts).
-
-```bash
-curl "http://localhost:8000/rooms/1/history?limit=50"
-```
-
-**Response:**
-```json
-[
-  {
-    "recorded_at": "2026-03-10T20:40:00",
-    "temperature": 28.2,
-    "gas_value": 395.0,
-    "risk_level": "safe",
-    "risk_score": 0.0
-  },
-  {
-    "recorded_at": "2026-03-10T20:41:00",
-    "temperature": 28.5,
-    "gas_value": 400.0,
-    "risk_level": "safe",
-    "risk_score": 0.0
-  },
-  ...
-]
-```
-
----
-
-#### `GET /danger-events`
-**Purpose:** All danger events (active and closed).
-
-```bash
-curl http://localhost:8000/danger-events
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "room_id": 1,
-    "trigger": "High temperature (89°C)",
-    "started_at": "2026-03-10T19:15:00",
-    "ended_at": "2026-03-10T19:22:30",
-    "duration_seconds": 450
-  },
-  {
-    "id": 2,
-    "room_id": 2,
-    "trigger": "High gas (2100 ppm)",
-    "started_at": "2026-03-10T20:30:00",
-    "ended_at": null,
-    "duration_seconds": null
-  }
-]
-```
-
----
-
-#### `GET /alerts`
-**Purpose:** All sent alerts (Telegram, email, SMS).
-
-```bash
-curl http://localhost:8000/alerts
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "room_id": 1,
-    "event_id": 1,
-    "channel": "telegram",
-    "message": "🔥 DANGER in Lab 101: High temperature (89°C). Event started 2026-03-10 19:15:00",
-    "sent_at": "2026-03-10T19:15:05",
-    "delivery_status": "sent",
-    "retry_count": 0
-  }
-]
-```
-
----
-
-### Interactive API Documentation
-
-Navigate to `http://localhost:8000/docs` for **Swagger UI**:
-- Try out all endpoints interactively
-- See request/response schemas
-- Auto-generated from Pydantic models
+Alerts that have not yet been marked as notified. Fields: `id`, `room_id`, `message`, `unsafe_exits`, `created_at`.
 
 ---
 
@@ -889,274 +542,69 @@ Navigate to `http://localhost:8000/docs` for **Swagger UI**:
 
 **Endpoint:** `ws://<host>:8000/ws/{room_id}`
 
-One connection per room. The server broadcasts a JSON message to all active connections for that room every time a new reading is processed. Clients keep the connection alive by calling `receive_text()` — no heartbeat needed.
-
-### Broadcast Payload
-
-Sent to all `/ws/{room_id}` clients immediately after risk assessment:
+After each `/ingest` call, the server sends a JSON message to connected clients:
 
 ```json
 {
   "room_id": 1,
-  "temperature": 28.5,
+  "temperature": 28.0,
   "gas_value": 400.0,
   "motion": false,
   "risk_score": 0.0,
   "risk_level": "safe",
-  "ml_score": 0.42,
-  "reason": "All readings normal",
-  "timestamp": "2026-03-10T20:42:15.123456"
+  "reason": "All readings normal"
 }
 ```
 
-### Client Reconnection Logic
-
-Implemented in all frontend pages:
-
-```javascript
-function openWS(roomId) {
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${protocol}://${window.location.host}/ws/${roomId}`);
-  
-  ws.onopen = () => {
-    console.log(`Connected to room ${roomId}`);
-  };
-  
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    updateUI(data);  // Update sensor bars, chart, timeline
-  };
-  
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
-  
-  ws.onclose = () => {
-    console.log('Disconnected, reconnecting in 3s...');
-    setTimeout(() => openWS(roomId), 3000);  // 3-second exponential backoff
-  };
-}
-
-// Call on page load
-openWS(1);
-```
-
-### Server-Side Connection Manager
-
-```python
-# In main.py
-from fastapi import WebSocket
-from typing import Dict, List
-
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[int, List[WebSocket]] = {}
-    
-    async def connect(self, room_id: int, websocket: WebSocket):
-        await websocket.accept()
-        if room_id not in self.active_connections:
-            self.active_connections[room_id] = []
-        self.active_connections[room_id].append(websocket)
-    
-    def broadcast(self, room_id: int, payload: dict):
-        """Send to all clients for this room, remove dead sockets."""
-        if room_id not in self.active_connections:
-            return
-        
-        dead_sockets = []
-        for ws in self.active_connections[room_id]:
-            try:
-                ws.send_json(payload)
-            except Exception:
-                dead_sockets.append(ws)
-        
-        # Clean up dead connections
-        for ws in dead_sockets:
-            self.active_connections[room_id].remove(ws)
-
-manager = ConnectionManager()
-
-@app.websocket("/ws/{room_id}")
-async def websocket_endpoint(room_id: int, websocket: WebSocket):
-    await manager.connect(room_id, websocket)
-    try:
-        while True:
-            await websocket.receive_text()  # Keep connection alive
-    except Exception:
-        manager.active_connections[room_id].remove(websocket)
-```
+**Current behavior:** the server sends every message to all connected clients, regardless of the `/ws/{room_id}` path they connected to. Clients should check `room_id` themselves. Per-room filtering is on the roadmap.
 
 ---
 
 ## Hardware Setup
 
+> **Verify before relying on this section.** The pin mapping, buzzer behavior, and firmware snippets below were written before the firmware was checked. Confirm each one against `firmware/esp32_sensor.ino`.
+
 ### Components
 
-| Component | Model | Accuracy | Cost | Role |
-|-----------|-------|----------|------|------|
-| MCU | ESP32 DevKit V1 | — | ₹400 | WiFi, GPIO control, onboard buzzer |
-| Temperature | DHT11 | ±2°C | ₹150 | Room temperature sensing |
-| Gas/Smoke | MQ2 | ±5% | ₹250 | LPG, smoke, CO analogue detection |
-| Motion | HC-SR501 PIR | — | ₹100 | Passive infrared motion detection |
-| **Total** | — | — | **~₹900** | Full sensor suite |
+| Component | Model | Role |
+|-----------|-------|------|
+| MCU | ESP32 DevKit V1 | WiFi, GPIO, onboard buzzer |
+| Temperature | DHT11 | Room temperature |
+| Gas / smoke | MQ2 | Gas reading (needs calibration to convert to ppm) |
+| Motion | HC-SR501 PIR | Motion flag |
 
 ### Pin Mapping
 
-| GPIO | Sensor | Type | Pin Type | Notes |
-|------|--------|------|----------|-------|
-| 4 | DHT11 DATA | Digital | I/O | 10 kΩ pull-up to 3.3V required |
-| 34 | MQ2 AOUT | Analog | Input | ADC1, 0–4095 range, input-only pin |
-| 27 | PIR OUT | Digital | Input | HIGH when motion detected |
-| 2 | Buzzer | Digital | Output | Active buzzer (direct drive) |
+| GPIO | Sensor | Type | Notes |
+|------|--------|------|-------|
+| 4 | DHT11 DATA | Digital | 10 kΩ pull-up to 3.3 V |
+| 34 | MQ2 AOUT | Analog input | ADC1; GPIO 34–39 are input-only |
+| 27 | PIR OUT | Digital input | HIGH when motion detected |
+| 2 | Buzzer | Digital output | Active buzzer |
 
-**⚠️ Important:** GPIO 34–39 on ESP32 are **input-only**. Never connect output signals to these pins.
-
-### Wiring Diagram
-
-```
-┌─────────────┐
-│   ESP32     │
-└─────────────┘
-    ┌─┬─┬─┬─┬─┐
-    │3│G│4│2│G│   (3.3V, GND, GPIO4, GPIO2, GND)
-    │.│N│ │ │N│
-    │3│D│ │ │D│
-    │V│ │ │ │ │
-    └─┴─┴─┴─┴─┘
-      │ │ │ │ │
-      │ │ │ │ └────────────────┐
-      │ │ │ │                  │
-      │ │ │ │    ┌──────────┐  │
-      │ │ │ │    │  Buzzer  │  │
-      │ │ │ │    │  (5V)    │  │
-      │ │ │ │    └──────────┘  │
-      │ │ │ └─────┤+) (GND)─────┴─→ GND
-      │ │ │
-      │ │ │ ┌─────────────────┐
-      │ │ │ │    DHT11        │
-      │ │ │ │  ┌───────┐      │
-      │ │ │ └──│ DATA  │      │
-      │ │ │    │  VCC  │      │
-      │ │ │    │  GND  │      │
-      │ │ │    └───────┘      │
-      │ │ │       ││││         │
-      │ │ └───────┘│││         │
-      │ │         │││         │
-      │ │     ┌───┴┴┴──┐       │
-      │ │     │10kΩ    │       │
-      │ │     │ p-up   │       │
-      │ │     │        │       │
-      │ │     └────┬───┘       │
-      │ │          │           │
-      │ └──────────┤ DATA      │
-      │            │           │
-      └────────────┤ VCC       │
-                   │           │
-                ┌──┴───────────┤ GND
-                │              │
-              GND              │
-                               │
-          ┌──────────────────────┘
-          │
-      ┌───▼─────┐
-      │  MQ2    │
-      │ (analog)│
-      │         │
-      │ VCC─────├─→ 5V
-      │ GND─────├─→ GND
-      │AOUT─────├─→ GPIO 34
-      │         │
-      └─────────┘
-
-          ┌──────────────────────┐
-          │    HC-SR501 PIR      │
-          │                      │
-          │ VCC──────────→ 5V    │
-          │ OUT──────────→ GPIO 27
-          │ GND──────────→ GND   │
-          └──────────────────────┘
-```
+Verify the wiring before powering the board.
 
 ### Firmware Configuration
 
 Edit `firmware/esp32_sensor.ino` before uploading:
 
 ```cpp
-// WiFi Configuration
 const char* ssid      = "YOUR_WIFI_SSID";
 const char* password  = "YOUR_WIFI_PASSWORD";
-const char* serverUrl = "http://10.63.176.231:8000/sensor-data";
+const char* serverUrl = "http://<YOUR_PC_IP>:8000/ingest";
 
-// Pin Configuration
-#define DHT_PIN     4       // GPIO 4 for DHT11 data
-#define MQ2_PIN     34      // GPIO 34 (ADC) for MQ2 analog
-#define PIR_PIN     27      // GPIO 27 for PIR output
-#define BUZZER_PIN  2       // GPIO 2 for buzzer
-#define ROOM_ID     1       // Room identifier (1, 2, or 3)
-
-// Timing
-#define INTERVAL    5000    // ms between sensor readings (5 seconds)
-#define WIFI_TIMEOUT 10000  // ms to wait for WiFi connection
-
-// Sensor Calibration
-#define MQ2_ZERO_PPM    400  // Baseline gas in clean air
-#define MQ2_FULL_SCALE  2048 // Maximum ppm (adjustable)
-#define DHT_READ_DELAY  2000 // ms between DHT reads (sensor slow)
+#define DHT_PIN     4
+#define MQ2_PIN     34
+#define PIR_PIN     27
+#define BUZZER_PIN  2
+#define ROOM_ID     1
 ```
+
+Set `serverUrl` to the backend's `/ingest` endpoint on your machine's LAN IP. `/ingest` is the only sensor endpoint in `main.py`.
 
 ### Sensor Warm-up
 
-**Important:** MQ2 gas sensor requires ~60 seconds warm-up after power-on for stable readings.
-
-```cpp
-void setup() {
-  Serial.begin(115200);
-  delay(1000);  // Wait for serial to stabilize
-  
-  // MQ2 warm-up: don't trust first 60 readings
-  Serial.println("MQ2 sensor warming up (60s)...");
-  for (int i = 0; i < 60; i++) {
-    analogRead(MQ2_PIN);  // Discard readings
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println("Ready!");
-}
-```
-
-### Firmware Core Loop
-
-```cpp
-void loop() {
-  // 1. Read sensors
-  float temp = dht.readTemperature();
-  float humidity = dht.readHumidity();
-  int gas_raw = analogRead(MQ2_PIN);
-  float gas_ppm = map_gas_to_ppm(gas_raw);
-  bool motion = digitalRead(PIR_PIN) == HIGH;
-  
-  // 2. Local hazard check (hardware failsafe)
-  if (temp >= 78 || gas_ppm >= 2000) {
-    sound_alarm();  // Immediate buzzer, no network required
-  }
-  
-  // 3. Send to server
-  if (WiFi.status() == WL_CONNECTED) {
-    send_to_backend(temp, gas_ppm, motion);
-  }
-  
-  delay(INTERVAL);
-}
-
-void sound_alarm() {
-  for (int i = 0; i < 5; i++) {
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(200);
-    digitalWrite(BUZZER_PIN, LOW);
-    delay(200);
-  }
-}
-```
+The MQ2 needs a warm-up period after power-on before its readings are stable. Allow it to warm up before collecting training data, and discard early readings.
 
 ---
 
@@ -1164,204 +612,87 @@ void sound_alarm() {
 
 ### Prerequisites
 
-- **Python 3.10+** (check: `python --version`)
-- **PostgreSQL 15+** running locally or on Supabase (check: `psql --version`)
-- **Arduino IDE 2.x** with ESP32 board support (for firmware)
-- **pip** package manager
+- Python 3.10+
+- PostgreSQL 15+ (local install)
+- Arduino IDE 2.x with ESP32 board support (for firmware)
 
-### Step 1: Clone Repository
+### Step 1: Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/fireflux.git
+git clone https://github.com/<your-username>/fireflux.git
 cd fireflux
 ```
 
-### Step 2: Create Python Virtual Environment
+### Step 2: Create the virtual environment
 
-```bash
-python -m venv venv
-source venv/bin/activate       # On Windows: venv\Scripts\activate
-pip install --upgrade pip
-```
-
-### Step 3: Install Dependencies
-
-```bash
+```powershell
 cd Backend
-pip install -r requirements.txt
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 ```
 
-**`requirements.txt` contents:**
-```
-fastapi==0.110.0
-uvicorn==0.27.0
-sqlalchemy==2.0.25
-psycopg2-binary==2.9.9
-pydantic==2.6.3
-pydantic-settings==2.2.1
-python-telegram-bot==20.3
-scikit-learn==1.3.2
-python-dotenv==1.0.0
+### Step 3: Install dependencies
+
+```powershell
+pip install fastapi uvicorn sqlalchemy psycopg2-binary python-dotenv httpx joblib scikit-learn pandas numpy
 ```
 
-### Step 4: Set Up PostgreSQL Database
+Once everything runs, record the exact versions with `pip freeze > requirements.txt`.
 
-#### Option A: Local PostgreSQL
+### Step 4: Create the database
 
-```bash
-# On Linux/Mac
-brew install postgresql
-brew services start postgresql
-
-# On Windows
-# Download from https://www.postgresql.org/download/windows/
-# Run installer, remember password
-```
-
-Create database:
-
-```bash
-psql -U postgres
-# Enter password from setup
-
+```sql
 CREATE DATABASE fireflux;
-\q
 ```
 
-#### Option B: Supabase (Cloud)
-
-1. Sign up at https://supabase.com
-2. Create new project
-3. Copy connection string from **Project Settings** → **Database**
-4. Format: `postgresql://user:password@host:5432/postgres`
-
-### Step 5: Configure Environment Variables
+### Step 5: Configure environment variables
 
 Create `Backend/.env`:
 
-```bash
-# Database
-DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/fireflux"
-
-# Telegram Bot (optional, for alerts)
-TELEGRAM_BOT_TOKEN="your_bot_token_here"
-TELEGRAM_CHAT_ID="your_chat_id_here"
-
-# Server
-SERVER_HOST="0.0.0.0"
-SERVER_PORT="8000"
+```
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/fireflux
+TELEGRAM_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
 ```
 
-**To generate Telegram bot token:**
-1. Message `@BotFather` on Telegram
-2. Send `/newbot`
-3. Follow prompts, copy token
-4. Send message to bot, find chat ID using: `curl https://api.telegram.org/bot<TOKEN>/getUpdates`
+The app raises an error on startup if `TELEGRAM_TOKEN` or `TELEGRAM_CHAT_ID` is missing.
 
-### Step 6: Start FastAPI Backend
+**Telegram setup:**
+1. Message `@BotFather` on Telegram and send `/newbot`.
+2. Copy the token it gives you.
+3. Send a message to your bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` to find your chat ID.
 
-```bash
-cd Backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+Never commit `.env` or a database password to Git.
+
+### Step 6: Train the model
+
+```powershell
+python train_model.py
 ```
 
-**Output:**
-```
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     ✓ Loaded model for room 1
-INFO:     ⚠ No model for room 2; using rule-based detection only
-INFO:     ⚠ No model for room 3; using rule-based detection only
-```
+Without `fire_model.pkl`, the app still runs and uses only the fixed danger limits for Room 1.
 
-Visit `http://localhost:8000/docs` to see Swagger UI.
+### Step 7: Start the backend
 
-### Step 7: Train ML Models (After 7+ Days of Data)
-
-```bash
-cd Backend
-python train_model.py --room_id 1 --output models/room_1_model.pkl
+```powershell
+uvicorn main:app --reload
 ```
 
-**Output:**
-```
-Loading 2854 readings for room 1...
-Training Isolation Forest (100 trees, contamination=0.05)...
-✓ Trained model F1 score: 0.909
-✓ Saved to models/room_1_model.pkl
-```
+Look for `ML model loaded successfully` in the output. If you see the warning instead, the model file is missing. Run `train_model.py` first.
 
-Restart the backend to load the trained model.
+Open `http://127.0.0.1:8000/docs` to test endpoints.
 
-### Step 8: Flash ESP32 Firmware
+### Step 8: Flash the ESP32 (optional)
 
-1. Open Arduino IDE 2.x
-2. Install ESP32 board:
-   - **File** → **Preferences** → **Additional Boards Manager URLs**
-   - Add: `https://dl.espressif.com/dl/package_esp32_index.json`
-   - **Tools** → **Board Manager** → Search "ESP32" → Install
+1. Open Arduino IDE 2.x and install the ESP32 board package.
+2. Install the libraries: `ArduinoJson`, `DHT sensor library` (Adafruit), `Adafruit Unified Sensor` (Adafruit).
+3. Open `firmware/esp32_sensor.ino` and set the WiFi credentials, `serverUrl`, and `ROOM_ID`.
+4. Select **Tools → Board → ESP32 Dev Module** and the correct port.
+5. Upload, then open the Serial Monitor at 115200 baud to confirm readings are being sent.
 
-3. Install libraries:
-   - **Tools** → **Manage Libraries**
-   - Search and install:
-     - `ArduinoJson` (by Benoit Blanchon)
-     - `DHT sensor library` (by Adafruit)
-     - `Adafruit Unified Sensor` (by Adafruit)
+### Firewall (Windows, optional for ESP32 access)
 
-4. Open `firmware/esp32_sensor.ino`
-
-5. **Edit credentials at top:**
-   ```cpp
-   const char* ssid = "YOUR_WIFI_SSID";
-   const char* password = "YOUR_WIFI_PASSWORD";
-   const char* serverUrl = "http://192.168.1.100:8000/sensor-data";  // Your PC's IP
-   #define ROOM_ID 1
-   ```
-
-6. **Select board:** Tools → Board → ESP32 Dev Module
-
-7. **Select port:** Tools → Port → /dev/ttyUSB0 (or COM3 on Windows)
-
-8. **Upload:** Sketch → Upload (or Ctrl+U)
-
-9. **Open Serial Monitor** (Tools → Serial Monitor) at 115200 baud to verify:
-   ```
-   MQ2 sensor warming up (60s)...
-   ...
-   Connected to WiFi
-   Sending to http://192.168.1.100:8000/sensor-data
-   ```
-
-### Step 9: Update Frontend IP Addresses
-
-In `frontend/*.html`, update the API and WebSocket URLs:
-
-```javascript
-// Find these lines (usually top of <script>)
-const API = "http://10.63.176.231:8000";    // ← Change to your machine's IP
-const WS  = "ws://10.63.176.231:8000";
-```
-
-To find your IP:
-```bash
-# Linux/Mac
-ifconfig | grep "inet " | grep -v 127.0.0.1
-
-# Windows
-ipconfig | findstr "IPv4"
-```
-
-### Step 10: Open Frontend
-
-Open any HTML file directly in a browser:
-```
-file:///path/to/frontend/index.html
-```
-
-**Note:** No web server required; files load directly from disk.
-
-### Firewall Configuration (Windows)
-
-Allow port 8000 for ESP32 to reach the backend:
+Allow port 8000 so the ESP32 can reach the backend on your LAN:
 
 ```powershell
 # Run PowerShell as Administrator
@@ -1377,575 +708,184 @@ New-NetFirewallRule `
 
 ## Frontend
 
-All five HTML pages are **self-contained** — no build step, no framework, no separate CSS/JS files. Each page works standalone or in combination.
+The frontend pages are static HTML files that connect to the backend's REST endpoints and WebSocket. Open them directly in a browser, or serve the folder with any static file server.
+
+Update the API and WebSocket URLs at the top of each page's script to point at your backend:
+
+```javascript
+const API = "http://127.0.0.1:8000";
+const WS  = "ws://127.0.0.1:8000";
+```
+
+**Typical behavior:**
+- Pages load the latest reading with `GET /rooms/{id}/latest`.
+- They subscribe to `/ws/{room_id}` for updates.
+- Colour is set from `risk_level` (`safe`, `warning`, `danger`).
+- Pages should filter messages by `room_id`, because the backend currently broadcasts to all clients.
 
 ### `index.html` — City Dashboard
 
-**Purpose:** Command center for all buildings + simulator.
-
-**Features:**
-- **Leaflet.js map** centred on Sector V, Kolkata
-  - Red/yellow/green markers per building
-  - Click marker to see live room status
-- **Sidebar status cards** (one per room)
-  - Large risk_level indicator (colour-coded)
-  - Temperature + gas values
-  - Last update timestamp
-- **Simulator panel**
-  - Temperature slider (0–100°C)
-  - Gas slider (0–3000 ppm)
-  - Motion toggle
-  - Send button → POST /ingest
-- **Global WebSocket subscriptions** to all rooms
-  - Keeps banner and sidebar live
-
-**Key JS:**
-```javascript
-// Open WebSocket for each room
-[1, 2, 3].forEach(roomId => openWS(roomId));
-
-// On every message, update sidebar + map
-function updateUI(data) {
-  const card = document.getElementById(`room-${data.room_id}`);
-  card.className = `status ${data.risk_level}`;  // CSS classes for color
-  card.innerHTML = `${data.temperature}°C | ${data.gas_value} ppm`;
-}
-```
-
----
+- Leaflet.js map with markers per building
+- Sidebar status cards per room
+- Simulator panel (temperature, gas, motion) that sends to `POST /ingest`
 
 ### `buildingA.html` — Floor Plan View
 
-**Purpose:** At-a-glance status for one building.
-
-**Features:**
-- **Grid layout** with room tiles (Lab 101, 102, 103)
-- **Live polling + WebSocket** for each room
-  - Poll `GET /rooms/{id}/latest` on load
-  - Subscribe to WebSocket for live updates
-- **Colour-coded tiles** (green=safe, orange=warning, red=danger)
-- **Exit signs** turn red when any room in danger
-- **Occupancy indicator** (based on PIR motion)
-
----
+- Room tiles coloured by `risk_level`
+- Loads `GET /rooms/{id}/latest` on open, then updates from WebSocket
 
 ### `room10X.html` — Per-Room Dashboard
 
-**Purpose:** Detailed monitoring for a single room.
-
-**Features:**
-- **Animated sensor bars**
-  - Temperature bar (blue → orange → red as temp rises)
-  - Gas bar (green → yellow → red as gas rises)
-  - Colour changes at IS 2189 thresholds (57°C, 78°C, 1000 ppm, 2000 ppm)
-- **Risk score ring** (0.0–1.0, animated SVG)
-- **Motion indicator dot** (pulsing when motion detected)
-- **Recommendation text** (rules-based advice)
-  - "All clear" (safe)
-  - "Monitor closely" (warning)
-  - "EVACUATE" (danger)
-- **Live Chart.js graph**
-  - Dual-axis: temperature (left) + gas (right)
-  - Last 50 readings from DB
-  - Scrolls as new data arrives
-- **Scrollable timeline table**
-  - Prepends new row on every WebSocket message
-  - Shows timestamp, temp, gas, risk_level
-  - 10-row window
-- **Offline warning bar** (appears if WebSocket down)
-
-**Key JS:**
-```javascript
-// Chart.js setup
-const ctx = document.getElementById('chart').getContext('2d');
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [
-      { label: 'Temp (°C)', yAxisID: 'y', borderColor: 'rgb(255, 99, 132)', data: [] },
-      { label: 'Gas (ppm)', yAxisID: 'y1', borderColor: 'rgb(54, 162, 235)', data: [] }
-    ]
-  },
-  options: {
-    scales: {
-      y: { position: 'left' },
-      y1: { position: 'right', grid: { drawOnChartArea: false } }
-    }
-  }
-});
-
-// On WebSocket message, update all UI elements
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  
-  // Update bars
-  document.getElementById('temp-bar').style.width = `${data.temperature / 100 * 100}%`;
-  document.getElementById('gas-bar').style.width = `${data.gas_value / 2500 * 100}%`;
-  
-  // Update chart
-  chart.data.labels.push(new Date(data.timestamp).toLocaleTimeString());
-  chart.data.datasets[0].data.push(data.temperature);
-  chart.data.datasets[1].data.push(data.gas_value);
-  if (chart.data.labels.length > 50) {
-    chart.data.labels.shift();
-    chart.data.datasets[0].data.shift();
-    chart.data.datasets[1].data.shift();
-  }
-  chart.update();
-  
-  // Update timeline
-  const row = document.createElement('tr');
-  row.innerHTML = `<td>${new Date(data.timestamp).toLocaleTimeString()}</td><td>${data.temperature}°C</td><td>${data.gas_value} ppm</td><td>${data.risk_level}</td>`;
-  document.getElementById('timeline').insertBefore(row, document.getElementById('timeline').firstChild);
-  if (document.getElementById('timeline').children.length > 10) {
-    document.getElementById('timeline').removeChild(document.getElementById('timeline').lastChild);
-  }
-};
-```
+- Sensor bars for temperature and gas
+- Colour changes at the fixed limits: 45°C and 1000 for elevated, 78°C and 2000 for danger
+- Chart.js graph of recent readings from `GET /rooms/{id}/history`
+- Timeline table of recent readings
 
 ---
 
 ## Data Flow
 
 ```
-Timeline: every 5 seconds
-
-1.  ESP32 DHT11 reads temperature (±0.5°C noise)
-2.  ESP32 MQ2 reads gas (0–4095 ADC → ppm)
-3.  ESP32 HC-SR501 reads motion (HIGH/LOW)
-4.  ┌─────────────────────────────────────┐
-    │ Hardware Failsafe (Buzzer)          │
-    │ if temp >= 78 OR gas >= 2000:       │
-    │   Buzzer ON → immediate alarm       │
-    └─────────────────────────────────────┘
-5.  POST /sensor-data  {room_id, temp, gas, motion}
-6.  ┌─────────────────────────────────────┐
-    │ FastAPI /sensor-data route          │
-    │ • Validate input (Pydantic)         │
-    │ • INSERT INTO sensor_readings       │
-    │ • Call assess_risk()                │
-    └─────────────────────────────────────┘
-7.  assess_risk(temp, gas, motion, room_id, ml_model)
-    ├─ ML anomaly score (if model loaded)
-    ├─ IS 2189 thresholds
-    └─ → {risk_level, risk_score, reason}
-8.  INSERT INTO risk_assessments {room_id, risk_level, reason, ...}
-9.  ┌─────────────────────────────────────┐
-    │ Danger Event Logic                  │
-    │ if risk_level == "danger":          │
-    │   Open new event (if none open)     │
-    │ elif risk_level == "safe":          │
-    │   Close open event (if any)         │
-    └─────────────────────────────────────┘
-10. ┌─────────────────────────────────────┐
-    │ Telegram Alert (5-min cooldown)     │
-    │ if risk_level == "danger":          │
-    │   Send to TELEGRAM_CHAT_ID          │
-    └─────────────────────────────────────┘
-11. ConnectionManager.broadcast(room_id, payload)
-    └─ Send JSON to all /ws/{room_id} clients
-12. ┌─────────────────────────────────────┐
-    │ Browser WebSocket Handlers          │
-    │ • Update sensor bars                │
-    │ • Append to Chart.js graph          │
-    │ • Prepend to timeline table         │
-    │ • Update risk_level badge           │
-    │ • Play alert sound (if danger)      │
-    └─────────────────────────────────────┘
+1.  ESP32 reads temperature (DHT11), gas (MQ2), and motion (PIR)
+2.  Buzzer check on the ESP32 (local, independent of network)
+3.  POST /ingest  {room_id, temperature, gas_value, motion}
+4.  FastAPI saves the reading                     → readings
+5.  assess_risk()
+      ├─ Isolation Forest decision (Room 1)
+      └─ fixed limits (danger / elevated)
+6.  Save the assessment                           → risk_assessments
+7.  If danger: create alert row                   → alerts
+8.  If danger: Telegram message (5-minute cooldown per room)
+9.  Broadcast the result to WebSocket clients
+10. Browser updates the status display
 ```
-
-### Latency Breakdown
-
-| Stage | Latency | Notes |
-|-------|---------|-------|
-| DHT11 read | ~2ms | Digital, synchronous |
-| MQ2 ADC | ~100µs | Fast analog |
-| WiFi send | ~50ms | Typical LAN latency |
-| FastAPI process | ~10ms | Pydantic validate + assess_risk() |
-| WebSocket broadcast | ~5ms | Per client (async) |
-| Browser render | ~50ms | DOM update, chart redraw |
-| **Total** | **~120ms** | From sensor → browser visual |
 
 ---
 
 ## Configuration Reference
 
-| Variable | File | Default | Type | Description |
-|----------|------|---------|------|-------------|
-| `DATABASE_URL` | `.env` | — | string | PostgreSQL connection URI |
-| `TELEGRAM_BOT_TOKEN` | `.env` | — | string | Telegram Bot API token (optional) |
-| `TELEGRAM_CHAT_ID` | `.env` | — | string | Telegram chat ID for alerts |
-| `SERVER_HOST` | `.env` | `0.0.0.0` | string | FastAPI bind address |
-| `SERVER_PORT` | `.env` | `8000` | int | FastAPI port |
-| `ALERT_COOLDOWN_SECONDS` | `main.py` | `300` | int | Min seconds between Telegram alerts |
-| `ssid` | `esp32_sensor.ino` | — | const char* | WiFi SSID |
-| `password` | `esp32_sensor.ino` | — | const char* | WiFi password |
-| `serverUrl` | `esp32_sensor.ino` | — | const char* | FastAPI endpoint (IP:port) |
-| `ROOM_ID` | `esp32_sensor.ino` | `1` | #define | Room identifier (1, 2, or 3) |
-| `INTERVAL` | `esp32_sensor.ino` | `5000` | #define | Reading interval (ms) |
-| `DHT_PIN` | `esp32_sensor.ino` | `4` | #define | GPIO for DHT11 data |
-| `MQ2_PIN` | `esp32_sensor.ino` | `34` | #define | GPIO for MQ2 analog |
-| `PIR_PIN` | `esp32_sensor.ino` | `27` | #define | GPIO for PIR output |
-| `BUZZER_PIN` | `esp32_sensor.ino` | `2` | #define | GPIO for buzzer |
-| `API` | `frontend/*.html` | `http://localhost:8000` | JS const | REST API base URL |
-| `WS` | `frontend/*.html` | `ws://localhost:8000` | JS const | WebSocket base URL |
+| Variable | Location | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | `Backend/.env` | PostgreSQL connection string |
+| `TELEGRAM_TOKEN` | `Backend/.env` | Telegram bot token (required by the app) |
+| `TELEGRAM_CHAT_ID` | `Backend/.env` | Telegram chat ID for alerts (required by the app) |
+| `ssid` / `password` | `esp32_sensor.ino` | WiFi credentials |
+| `serverUrl` | `esp32_sensor.ino` | Backend `/ingest` URL (LAN IP and port) |
+| `ROOM_ID` | `esp32_sensor.ino` | Room identifier sent with each reading |
+| `DHT_PIN`, `MQ2_PIN`, `PIR_PIN`, `BUZZER_PIN` | `esp32_sensor.ino` | GPIO assignments |
+| `API`, `WS` | `frontend/*.html` | Backend REST and WebSocket base URLs |
+
+Thresholds are set in `main.py` (`assess_risk()`), not in `.env`. Changing a threshold there changes the app's behavior, so update the evaluation and this README too.
 
 ---
 
 ## Testing & Validation
 
-### Manual Testing with curl
+### Swagger (recommended)
 
-#### Test 1: Safe Reading
+Open `http://127.0.0.1:8000/docs`, choose `POST /ingest`, click **Try it out**, and send these inputs:
+
+| temperature | gas_value | Expected `risk_level` |
+|-------------|-----------|-----------------------|
+| 29.0 | 400.0 | `safe` |
+| 31.0 | 1359.0 | `warning` |
+| 65.0 | 513.0 | `warning` |
+| 90.0 | 2500.0 | `danger` |
+
+Each request writes a row to `readings`. Test rows that remain in the table become training data, so delete them and retrain before relying on the model.
+
+### curl examples
 
 ```bash
+# Safe reading
 curl -s -X POST http://localhost:8000/ingest \
   -H "Content-Type: application/json" \
-  -d '{
-    "room_id": 1,
-    "temperature": 28.0,
-    "gas_value": 400.0,
-    "motion": false
-  }' | python -m json.tool
-```
+  -d '{"room_id": 1, "temperature": 29.0, "gas_value": 400.0, "motion": false}'
 
-**Expected response:**
-```json
-{
-  "room_id": 1,
-  "temperature": 28.0,
-  "gas_value": 400.0,
-  "motion": false,
-  "risk_score": 0.0,
-  "risk_level": "safe",
-  "reason": "All readings normal",
-  "timestamp": "2026-03-10T20:42:15.123456"
-}
-```
-
-#### Test 2: Warning (Elevated Gas)
-
-```bash
+# Warning (elevated gas)
 curl -s -X POST http://localhost:8000/ingest \
   -H "Content-Type: application/json" \
-  -d '{
-    "room_id": 1,
-    "temperature": 30.0,
-    "gas_value": 1200.0,
-    "motion": false
-  }' | python -m json.tool
-```
+  -d '{"room_id": 1, "temperature": 31.0, "gas_value": 1359.0, "motion": false}'
 
-**Expected:**
-```json
-{
-  "risk_level": "warning",
-  "risk_score": 0.5,
-  "reason": "Elevated gas (1200 ppm)"
-}
-```
-
-#### Test 3: Danger (High Temp + High Gas + Motion)
-
-```bash
+# Danger (high temperature and gas)
 curl -s -X POST http://localhost:8000/ingest \
   -H "Content-Type: application/json" \
-  -d '{
-    "room_id": 1,
-    "temperature": 90.0,
-    "gas_value": 2800.0,
-    "motion": true
-  }' | python -m json.tool
+  -d '{"room_id": 1, "temperature": 90.0, "gas_value": 2500.0, "motion": true}'
 ```
 
-**Expected:**
-```json
-{
-  "risk_level": "danger",
-  "risk_score": 0.9,
-  "reason": "High temperature (90°C), High gas (2800 ppm)"
-}
+### Model evaluation
+
+```powershell
+python evaluate_model.py
 ```
 
-#### Test 4: Verify Danger Event Opened
+See [Evaluation](#evaluation) for what the output means.
 
-```bash
-curl -s http://localhost:8000/danger-events | python -m json.tool
-```
+### Checking stored data
 
-**Expected:**
-```json
-[
-  {
-    "id": 1,
-    "room_id": 1,
-    "trigger": "High temperature (90°C), High gas (2800 ppm)",
-    "started_at": "2026-03-10T20:42:00",
-    "ended_at": null
-  }
-]
-```
+```sql
+SELECT COUNT(*) AS total FROM readings;
 
-#### Test 5: Send Safe Reading to Close Event
-
-```bash
-curl -s -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "room_id": 1,
-    "temperature": 28.0,
-    "gas_value": 400.0,
-    "motion": false
-  }' | python -m json.tool
-```
-
-#### Test 6: Verify Event Closed
-
-```bash
-curl -s http://localhost:8000/danger-events | python -m json.tool
-```
-
-**Expected:** `ended_at` now contains timestamp.
-
----
-
-### Query Endpoints
-
-```bash
-# List all rooms
-curl http://localhost:8000/rooms | python -m json.tool
-
-# Latest reading for room 1
-curl http://localhost:8000/rooms/1/latest | python -m json.tool
-
-# Last 20 readings for room 1 (for chart)
-curl "http://localhost:8000/rooms/1/history?limit=20" | python -m json.tool
-
-# All danger events
-curl http://localhost:8000/danger-events | python -m json.tool
-
-# All alerts
-curl http://localhost:8000/alerts | python -m json.tool
-```
-
----
-
-### Swagger UI
-
-Navigate to `http://localhost:8000/docs` for interactive API testing:
-- **Try it out** buttons on every endpoint
-- Real-time response preview
-- Auto-schema documentation (from Pydantic models)
-
----
-
-### Performance Metrics
-
-On 2,854 verified readings across 3 rooms:
-
-```
-Model Accuracy:        97.9%
-Precision (danger):    100%      (no false positives)
-Recall (danger):       100%      (catches all real fires)
-F1 Score:              0.909
-False Alarm Rate:      <1%       (~28 false warnings / year)
-```
-
----
-
-### Load Testing
-
-Use **Locust** to simulate concurrent users:
-
-```bash
-pip install locust
-
-# Create locustfile.py
-from locust import HttpUser, task, between
-
-class FireFluxUser(HttpUser):
-    wait_time = between(1, 3)
-    
-    @task(3)
-    def get_latest(self):
-        self.client.get("/rooms/1/latest")
-    
-    @task(1)
-    def post_reading(self):
-        self.client.post("/ingest", json={
-            "room_id": 1,
-            "temperature": 28 + random.uniform(-2, 2),
-            "gas_value": 400 + random.uniform(-50, 50),
-            "motion": random.choice([True, False])
-        })
-
-# Run
-locust -f locustfile.py --host http://localhost:8000
+SELECT COUNT(*) FILTER (WHERE temperature >= 45 OR gas_value >= 1000) AS elevated
+FROM readings;
 ```
 
 ---
 
 ## Deployment
 
-### Docker Build & Run
-
-#### Build Image
+### Docker (only if you have built and run it)
 
 ```bash
 cd Backend
 docker build -t fireflux:latest .
+docker run -p 8000:8000 --env-file .env fireflux:latest
 ```
 
-#### Run Container (Local)
+Keep this section only if the `Dockerfile` exists and you have run this command successfully.
 
-```bash
-docker run -it \
-  -e DATABASE_URL="postgresql://user:pass@db:5432/fireflux" \
-  -e TELEGRAM_BOT_TOKEN="xxx" \
-  -e TELEGRAM_CHAT_ID="xxx" \
-  -p 8000:8000 \
-  fireflux:latest
-```
+### Cloud hosting (planned)
 
-#### Docker Compose (Full Stack)
+Render (backend) and Supabase (PostgreSQL) are options for hosting. Neither is set up yet. When you deploy, set `DATABASE_URL`, `TELEGRAM_TOKEN`, and `TELEGRAM_CHAT_ID` as environment variables, and use `wss://` for the WebSocket on HTTPS.
 
-Create `docker-compose.yml`:
+### Notes for production
 
-```yaml
-version: '3.8'
-
-services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: fireflux
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  backend:
-    build: ./Backend
-    environment:
-      DATABASE_URL: "postgresql://postgres:${DB_PASSWORD}@db:5432/fireflux"
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-    volumes:
-      - ./Backend:/app
-
-  frontend:
-    image: nginx:alpine
-    volumes:
-      - ./frontend:/usr/share/nginx/html
-    ports:
-      - "80:80"
-
-volumes:
-  postgres_data:
-```
-
-Start:
-```bash
-docker-compose up -d
-```
-
----
-
-### Cloud Deployment (Render + Supabase)
-
-#### 1. Database: Supabase
-
-1. Sign up at https://supabase.com
-2. Create project
-3. Copy PostgreSQL connection string
-4. Set in Render environment: `DATABASE_URL=<your-connection-string>`
-
-#### 2. Backend: Render
-
-1. Push code to GitHub
-2. Create new Web Service on Render
-3. Connect GitHub repo
-4. Set environment variables:
-   ```
-   DATABASE_URL = <supabase-connection>
-   TELEGRAM_BOT_TOKEN = <bot-token>
-   TELEGRAM_CHAT_ID = <chat-id>
-   ```
-5. Build command: `pip install -r Backend/requirements.txt`
-6. Start command: `cd Backend && uvicorn main:app --host 0.0.0.0 --port 8000`
-7. Deploy
-
-**Domain:** `fireflux-api.render.com`
-
-#### 3. Frontend: Vercel or GitHub Pages
-
-1. Update `frontend/*.html` with production IP:
-   ```javascript
-   const API = "https://fireflux-api.render.com";
-   const WS  = "wss://fireflux-api.render.com";  // WSS for HTTPS
-   ```
-2. Deploy frontend files to Vercel or GitHub Pages
-
----
-
-### Scaling Considerations
-
-- **Database:** Add read replicas for heavy query load
-- **WebSocket:** Use Redis pub/sub for multi-server broadcasting
-- **API:** Horizontal scale FastAPI instances behind load balancer (Nginx)
-- **Storage:** Archive old readings to S3 after 90 days
+- Retrain on a rolling window of recent normal data.
+- Add authentication to write endpoints before exposing the server beyond your LAN.
+- Restrict CORS (`allow_origins=["*"]` is for development only).
 
 ---
 
 ## Roadmap
 
-- [x] Core 3-layer architecture (hardware + ML + rule-based)
-- [x] Real-time WebSocket broadcast
-- [x] Telegram alert system
-- [x] Interactive city dashboard (Leaflet.js)
-- [x] Per-room live dashboard with history chart
-- [ ] Multi-building support (Buildings B–F)
-- [ ] Nginx reverse proxy + WSS encryption
-- [ ] JWT authentication on API routes
-- [ ] Mobile-responsive UI
-- [ ] Advanced analytics dashboard (heatmaps, trend analysis)
-- [ ] Integration with existing fire alarm systems (SLC loop emulation)
-- [ ] Computer vision smoke detection (optional secondary layer)
-- [ ] Predictive maintenance alerts (sensor drift detection)
+- [x] Isolation Forest anomaly model with time-ordered evaluation
+- [x] Fixed safety limits that override "safe"
+- [x] Telegram alerts with per-room cooldown
+- [x] Live WebSocket broadcast
+- [ ] Event lifecycle tracking (danger events with open and close times)
+- [ ] Filter WebSocket broadcast by room
+- [ ] Scheduled retraining on a rolling window
+- [ ] Added features (for example, rate of change) to improve subtle-anomaly detection
+- [ ] Per-room models or features for multiple sensors
+- [ ] Calibrated gas units (ppm)
+- [ ] Evaluation on labeled real data
+- [ ] Authentication on API routes
+- [ ] Docker and cloud deployment (verified)
+- [ ] Mobile-responsive frontend
 
 ---
 
 ## License
 
-**MIT License**
+MIT License
 
-```
-Copyright (c) 2026 FireFlux Project — IEM Campus, Kolkata
+Copyright (c) 2026 FireFlux Project
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ---
 
@@ -1953,8 +893,6 @@ THE SOFTWARE.
 
 For questions about this project:
 - 📧 Open an issue on GitHub
-- 🔗 See `docs/` folder for deep-dives
 - 💬 Check Swagger UI at `/docs` for API details
 
 ---
-
