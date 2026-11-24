@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import json
 import httpx
 import joblib
+import pandas as pd
 import numpy as np
 import os
 from dotenv import load_dotenv
@@ -91,16 +92,12 @@ def assess_risk(temperature: float, gas_value: float, motion: bool, room_id: int
 
     # Prepare input — temperature and gas only
     # Motion removed from ML features — caused false warnings
-    X = np.array([[temperature, gas_value]])
-
-    # Get anomaly score
-    # More negative = more anomalous
+    X = pd.DataFrame([[temperature, gas_value]], columns=["temperature", "gas_value"])
     score = model.decision_function(X)[0]
-    
-    
+    is_anomaly = model.predict(X)[0] == -1
 
-    if score > -0.05:
-        # ML says normal for this building
+    if not is_anomaly:
+        # ML says normal for this room
         return 0.0, "safe", "All readings normal"
 
     # ML flagged anomaly — check severity in 3 tiers
